@@ -1,0 +1,10 @@
+{
+  "name": "calzadosjuarez-ecommerce",
+  "private": true,
+  "packageManager": "pnpm@10.3.0",
+  "scripts": {
+    "dev:backend": "pnpm --filter backend dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev": "pnpm --parallel --filter backend --filter frontend dev"
+  }
+}
