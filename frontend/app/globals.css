@@ -1,1 +1,6 @@
 @import "tailwindcss";
+
+/* Cuando el usuario navegue entre páginas, esto hará un scroll-top automatico  */
+html {
+  scroll-padding-top: 64px; /* Match the height of your sticky header */
+}
