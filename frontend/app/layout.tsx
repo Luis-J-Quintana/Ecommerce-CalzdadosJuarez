@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Header from "../components/layout/Header"
 import Footer from "../components/layout/Footer"
-import "./globals.css";
+import "./global.css";
 
 export const metadata: Metadata = {
   title: "Calzados Juárez",
@@ -17,9 +17,9 @@ export default function RootLayout({
     <html
       lang="es"
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-screen flex flex-col">
         <Header></Header>
-        {children}
+        <main className="flex-1">{children}</main>
         <Footer></Footer>
 
       </body>
