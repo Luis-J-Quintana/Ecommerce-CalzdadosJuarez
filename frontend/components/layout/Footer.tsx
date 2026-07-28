@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import MercadoPagoLogo from "../../icons/MercadoPagoLogo.png";
 import PaypalLogo from "../../icons/PaypalLogo.jpg";
-import "../../app/global.css";
+import "../../app/globals.css";
 
 export default function Footer() {
   return (
