@@ -1,0 +1,42 @@
+@import "tailwindcss";
+@plugin "@iconify/tailwind4";
+
+
+:root {
+  --footer-bg: #000000;
+  --footer-text: #ffffff;
+  --footer-font: "Poppins", sans-serif; 
+
+  /* Color waves footer*/
+  --footer-wave-1: #6b6b6b;
+  --footer-wave-2: #333333;
+  --footer-wave-3: #000000;
+}
+
+/*******************************/
+/*          FOOTER             */
+/*******************************/
+/* Efecto ola */
+.wave-layer {
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.wave-layer-1 {
+  animation: wave-move 14s infinite linear;
+  opacity: 0.6;
+}
+.wave-layer-2 {
+  animation: wave-move 10s infinite linear reverse;
+  opacity: 0.8;
+}
+.wave-layer-3 {
+  animation: wave-move 7s infinite linear;
+}
+@keyframes wave-move {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
