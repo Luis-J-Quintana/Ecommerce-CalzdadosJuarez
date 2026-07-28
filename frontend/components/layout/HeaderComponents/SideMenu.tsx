@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { categories } from "@/lib/categories";
+import CustomIcon from "../CustomIcon";
+import { BiUser } from "react-icons/bi";
 
 type SideMenuProps = {
   isOpen: boolean;
@@ -23,21 +25,21 @@ export default function SideMenu({ isOpen, onClose, topOffset }: SideMenuProps) 
       {/* Panel */}
       <aside
         style={{ top: topOffset, height: `calc(100vh - ${topOffset}px)` }}
-        className={`fixed left-0 w-full min-[750px]:w-96 bg-white z-20
+        className={`fixed left-0 w-full min-[750px]:w-96 bg-header z-20
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? "translate-y-0" : "translate-y-full"}
           flex flex-col`}
       >
-        <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-rose-50/40">
+        <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-side-menu">
           {categories.map((cat) => (
             <Link
               key={cat.href}
               href={cat.href}
               onClick={onClose}
-              className="flex items-center gap-4 bg-white border border-gray-100 
+              className="flex items-center gap-4 bg-header border border-gray-100 
                          rounded-xl p-3 hover:border-gray-300 transition-colors"
             >
-              <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+              <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0">
                 {cat.image ? (
                   <img src={cat.image} alt={cat.label} className="w-full h-full object-cover" />
                 ) : (
@@ -50,15 +52,22 @@ export default function SideMenu({ isOpen, onClose, topOffset }: SideMenuProps) 
               </div>
             </Link>
           ))}
-            {/* TODO: add a footer in this component and a list of classic pages (nosotros, productos, contacto, etc.) */}
-            <div>
-                <ul>
-                    <li>NOSOTROS</li>
-                    <li>PRODUCTOS</li>
-                    <li>CONTACTO</li>
+            {/* TODO: link pages (nosotros, productos, contacto, etc.) */}
+            <div className="border-t border-division-line py-3 px-4 mt-4">
+                <ul className="font-bold text base flex flex-col space-y-3.5">
+                    <li>Nosotros</li>
+                    <li>Productos</li>
+                    <li>Contacto</li>
                 </ul>
             </div>
-            <footer>somthing</footer>
+            {/* Footer of the SideMenu */}
+            <div className="-mx-4 -mb-4 mt-4 bg-side-menu-footer px-4 py-4">
+              <ul className="pl-3 grid grid-cols-3 items-center text-sm">
+                <li className="flex flex-row gap-2 items-center"><CustomIcon icon={BiUser} size={18}/>Iniciar Sesión</li>
+                <li>Moneda | MX</li>
+                <li>Idioma</li>
+              </ul>
+            </div>
 
         </nav>
       </aside>
