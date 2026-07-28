@@ -13,6 +13,12 @@
   --footer-wave-3: #000000;
 }
 
+/* Cuando el usuario navegue entre páginas, esto hará un scroll-top automatico  */
+html {
+  scroll-padding-top: 64px; /* Match the height of your sticky header */
+}
+
+
 /*******************************/
 /*          FOOTER             */
 /*******************************/
