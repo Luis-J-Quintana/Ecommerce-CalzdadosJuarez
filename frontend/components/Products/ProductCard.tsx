@@ -11,6 +11,7 @@ function formatPrice(value: number, currency: string) {
 
 export default function ProductCard({ product }: { product: Product }) {
   return (
+    /* TODO: cambiar el la dirección del link a la vista de la información detallada del producto (supongo que será un commponente reutilizable) */
     <Link href={`/productos/${product.slug}`} className="flex flex-col">
       <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-100">
         {product.image ? (
