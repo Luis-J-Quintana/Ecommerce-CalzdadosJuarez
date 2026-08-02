@@ -16,6 +16,10 @@ export default function NewThisWeekSection() {
           <ProductCard key={product.id} product={product} />
         ))}
       </div>
+      <div className="flex justify-center my-12">
+        {/* TODO: colocar botón dentro de una etiqueta Link que te envie a la vista Catálogo */}
+        <button className="bg-black text-white text-xl font-bold border-2 rounded-md px-4 py-2 hover:bg-white hover:text-black transition delay-100">VER TODO</button>
+      </div>
     </section>
   );
 }

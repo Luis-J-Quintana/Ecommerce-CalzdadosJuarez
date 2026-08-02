@@ -17,6 +17,9 @@
 html {
   scroll-padding-top: 64px; /* Match the height of your sticky header */
 }
+button {
+  cursor: pointer; /* Permite que el cursor cambie al posicionarse sobre cualquier botón */
+}
 
 
 /*******************************/
