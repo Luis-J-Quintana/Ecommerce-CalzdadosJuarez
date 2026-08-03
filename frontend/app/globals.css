@@ -1,26 +1,56 @@
 @import "tailwindcss";
+@plugin "@iconify/tailwind4";
+
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --footer-bg: #000000;
+  --footer-text: #ffffff;
+  --footer-font: "Poppins", sans-serif; 
+
+  /* Color waves footer*/
+  --footer-wave-1: #6b6b6b;
+  --footer-wave-2: #333333;
+  --footer-wave-3: #000000;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Cuando el usuario navegue entre páginas, esto hará un scroll-top automatico  */
+html {
+  scroll-padding-top: 64px; /* Match the height of your sticky header */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@theme {
+  --color-pages: blue; /* TODO: cambiar por el color correspondiente */
+  --color-header: white;
+  --color-side-menu: oklch(96.9% 0.015 12.422);
+  --color-division-line: #eaeaea;
+  --color-side-menu-footer: #f3ecee;
+}
+
+
+/*******************************/
+/*          FOOTER             */
+/*******************************/
+/* Efecto ola */
+.wave-layer {
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.wave-layer-1 {
+  animation: wave-move 14s infinite linear;
+  opacity: 0.6;
+}
+.wave-layer-2 {
+  animation: wave-move 10s infinite linear reverse;
+  opacity: 0.8;
+}
+.wave-layer-3 {
+  animation: wave-move 7s infinite linear;
+}
+@keyframes wave-move {
+  0% {
+    transform: translateX(0);
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  100% {
+    transform: translateX(-50%);
+  }
 }
