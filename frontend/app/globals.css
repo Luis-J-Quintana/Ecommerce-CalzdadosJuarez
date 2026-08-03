@@ -18,6 +18,14 @@ html {
   scroll-padding-top: 64px; /* Match the height of your sticky header */
 }
 
+@theme {
+  --color-pages: blue; /* TODO: cambiar por el color correspondiente */
+  --color-header: white;
+  --color-side-menu: oklch(96.9% 0.015 12.422);
+  --color-division-line: #eaeaea;
+  --color-side-menu-footer: #f3ecee;
+}
+
 
 /*******************************/
 /*          FOOTER             */
