@@ -1,13 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "@/lib/products";
+import { formatPrice } from "@/lib/utils";
 
-function formatPrice(value: number, currency: string) {
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency,
-  }).format(value);
-}
 
 export default function ProductCard({ product }: { product: Product }) {
   return (

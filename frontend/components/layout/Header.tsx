@@ -7,7 +7,8 @@ import { IoMdMenu } from "react-icons/io";
 import { AiOutlineClose } from "react-icons/ai";
 import CustomIcon from './CustomIcon'
 import { useRef, useState, useEffect } from "react";
-import SideMenu from './HeaderComponents/SideMenu'
+import SideMenu from './HeaderComponents/SideMenu';
+import SideListProducts from '../ShopingCart/SideListProducts';
 import {
   LuSearch,
   LuUser,
@@ -43,6 +44,7 @@ export default function Header() {
   const topNavRef = useRef<HTMLDivElement>(null);
   const [topNavHeight, setTopNavHeight] = useState(0);
   const [menuOpened, setMenuOpened] = useState(false);
+  const [shopingCartOpened, setShopingCartOpened] = useState(false);
   const hidden = useScrollDirection();
 
 
@@ -82,13 +84,19 @@ export default function Header() {
             </li>
 
             <li className="flex items-center gap-3 justify-self-end">
-              <CustomIcon icon={LuSearch} size={30} color='black'/>
-              <CustomIcon icon={LuUser} size={30} color='black'/>
-              <CustomIcon icon={LuShoppingCart} size={30} color='black'/>
+              <button>
+                <CustomIcon icon={LuSearch} size={30} color='black'/>
+              </button>
+              <Link href={"/login"}>
+                <CustomIcon icon={LuUser} size={30} color='black'/>
+              </Link>
+              <button onClick={() => {setShopingCartOpened(!shopingCartOpened)}}>
+                <CustomIcon icon={LuShoppingCart} size={30} color='black'/>
+              </button>
             </li>
           </ul>
         </nav>
-        {/* the nav behind it should apears only when some link were selected */}
+        {/* the nav behind should apears only when some link were selected */}
         {isCategorySelected && (
           <nav className='relative z-0 flex justify-around py-3 bg-white'>
             <LinkCategories/>
@@ -101,6 +109,11 @@ export default function Header() {
         onClose={() => setMenuOpened(false)}
         topOffset={topNavHeight} 
       />
+
+      <SideListProducts
+        isOpen={shopingCartOpened}
+        onClose={() => setShopingCartOpened(false)}
+        topOffset={0}/>
         
       
     </>
