@@ -23,4 +23,8 @@ export interface Product {
   createdAt: string; /* Fecha que se agregó el producto */
   rating?: number; /* Calificación estrellas */
   reviewsCount?: number; /* Num. de reseñas que tiene el producto */
+  isNew?: boolean;
+  slug?: string;
+  currency?: string;
+  installments?: number;
 }
