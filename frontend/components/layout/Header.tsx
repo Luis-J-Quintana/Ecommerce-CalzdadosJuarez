@@ -5,13 +5,15 @@ import { categories } from "@/lib/categories";
 import { useScrollDirection } from "@/hooks/useScrollDirection";
 import { IoMdMenu } from "react-icons/io";
 import { AiOutlineClose } from "react-icons/ai";
-import { CiSearch } from "react-icons/ci";
-import { BiUser } from "react-icons/bi";
-import { IoCartOutline } from "react-icons/io5";
 import CustomIcon from './CustomIcon'
 import { useRef, useState, useEffect } from "react";
-import SideMenu from './HeaderComponents/SideMenu'
-
+import SideMenu from './HeaderComponents/SideMenu';
+import SideListProducts from '../ShopingCart/SideListProducts';
+import {
+  LuSearch,
+  LuUser,
+  LuShoppingCart
+} from "react-icons/lu";
 
 function LinkCategories() {
   const pathname = usePathname();
@@ -42,6 +44,7 @@ export default function Header() {
   const topNavRef = useRef<HTMLDivElement>(null);
   const [topNavHeight, setTopNavHeight] = useState(0);
   const [menuOpened, setMenuOpened] = useState(false);
+  const [shopingCartOpened, setShopingCartOpened] = useState(false);
   const hidden = useScrollDirection();
 
 
@@ -60,7 +63,7 @@ export default function Header() {
   return (
     <>
       <div
-        className={`sticky top-0 flex flex-col transition-transform duration-300 ${
+        className={`sticky top-0 z-50 flex flex-col transition-transform duration-300 ${
           hidden && !menuOpened ? "-translate-y-full" : "translate-y-0"
         }`}
       >
@@ -80,15 +83,20 @@ export default function Header() {
               </Link>
             </li>
 
-            {/* TODO: change the icons and make them skinniest*/}
             <li className="flex items-center gap-3 justify-self-end">
-              <CustomIcon icon={CiSearch} size={30} color='black'/>
-              <CustomIcon icon={BiUser} size={30} color='black'/>
-              <CustomIcon icon={IoCartOutline} size={30} color='black'/>
+              <button>
+                <CustomIcon icon={LuSearch} size={30} color='black'/>
+              </button>
+              <Link href={"/login"}>
+                <CustomIcon icon={LuUser} size={30} color='black'/>
+              </Link>
+              <button onClick={() => {setShopingCartOpened(!shopingCartOpened)}}>
+                <CustomIcon icon={LuShoppingCart} size={30} color='black'/>
+              </button>
             </li>
           </ul>
         </nav>
-        {/* the nav behind it should apears only when some link were selected */}
+        {/* the nav behind should apears only when some link were selected */}
         {isCategorySelected && (
           <nav className='relative z-0 flex justify-around py-3 bg-white'>
             <LinkCategories/>
@@ -101,6 +109,11 @@ export default function Header() {
         onClose={() => setMenuOpened(false)}
         topOffset={topNavHeight} 
       />
+
+      <SideListProducts
+        isOpen={shopingCartOpened}
+        onClose={() => setShopingCartOpened(false)}
+        topOffset={0}/>
         
       
     </>
