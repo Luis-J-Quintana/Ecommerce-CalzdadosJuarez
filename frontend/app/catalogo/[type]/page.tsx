@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { categories } from "@/lib/categories";
 import { products } from "@/lib/products";
-import CatalogView from "@/components/layout/Catalogo/CatalogoView";
+import CatalogView from "@/components/Catalogo/CatalogoView";
 
 interface CatalogoTypePageProps {
   params: Promise<{

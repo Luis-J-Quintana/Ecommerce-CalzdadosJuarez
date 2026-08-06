@@ -1,4 +1,4 @@
-import CatalogView from "@/components/layout/Catalogo/CatalogoView";
+import CatalogView from "@/components/Catalogo/CatalogoView";
 import { products } from "@/lib/products";
 
 /**

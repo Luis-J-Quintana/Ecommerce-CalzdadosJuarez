@@ -1,4 +1,4 @@
-import type { Product } from "@/components/layout/Catalogo/types";
+import type { Product } from "@/components/Catalogo/types";
 import S11 from "@/icons/SandaliasTest/SandaliaTest1-1.jpg"
 import S12 from "@/icons/SandaliasTest/SandaliaTest1-2.jpg"
 import S21 from "@/icons/SandaliasTest/SandaliaTest2-1.jpg"
@@ -28,6 +28,7 @@ export const products: Product[] = [
     createdAt: "2026-01-15",
     rating: 5,
     reviewsCount: 13,
+    isNew: true
   },
   {
     id: "2501r-nairobi-late",
@@ -45,6 +46,8 @@ export const products: Product[] = [
     createdAt: "2025-11-02",
     rating: 5,
     reviewsCount: 13,
+    isNew: true
+
   },
   {
     id: "2502r-late",
@@ -62,6 +65,8 @@ export const products: Product[] = [
     createdAt: "2026-03-20",
     rating: 5,
     reviewsCount: 12,
+    isNew: true
+
   },
   {
     id: "2503r-yute-natural",
@@ -79,5 +84,7 @@ export const products: Product[] = [
     createdAt: "2025-08-10",
     rating: 5,
     reviewsCount: 17,
+    isNew: true
+
   },
 ];
