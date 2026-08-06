@@ -1,4 +1,4 @@
-import type { Product } from "./products";
+import type { Product } from "@/components/Catalogo/types";
 import { products } from "./products";
 
 export type CartItem = {
@@ -15,39 +15,48 @@ export type CartItem = {
   wholesaleLabel?: string; // ej. "Precios mayoreo 3 pares surtidos"
 };
 
-function findProduct(id: string): Product {
+function findProduct(id: string): Product | undefined {
   const product = products.find((p) => p.id === id);
-  if (!product) {
-    throw new Error(`Mock inválido: no existe un product con id "${id}"`);
+  if(!product)
+  {
+    console.warn(`Mock inválido: no existe un product con id "${id}"`);
   }
   return product;
 }
 
+function buildCartItem(
+  id: string,
+  productId: string,
+  overrides: Omit<CartItem, "id" | "productId" | "slug" | "name" | "image">
+): CartItem | null {
+  const product = findProduct(productId);
+  if (!product) return null;
+
+  return {
+    id,
+    productId,
+    slug: product.slug ?? '',
+    name: product.name,
+    image: product.image,
+    ...overrides,
+  };
+}
+
 export const cartProducts: CartItem[] = [
-  {
-    id: "cart-item-1",
-    productId: "292ar-negro",
-    slug: findProduct("292ar-negro").slug,
-    name: findProduct("292ar-negro").name,
+  buildCartItem("cart-item-1", "2502r-rojo", {
     size: "22.5",
-    image: findProduct("292ar-negro").image,
     quantity: 2,
     price: 993.88,
     originalPrice: 1343.08,
     currency: "MXN",
     /* wholesaleLabel: "Precios mayoreo 3 pares surtidos", */
-  },
-  {
-    id: "cart-item-2",
-    productId: "310ar-blanco",
-    slug: findProduct("310ar-blanco").slug,
-    name: findProduct("310ar-blanco").name,
+  }),
+  buildCartItem("cart-item-2", "2503r-yute-natural", {
     size: "23",
-    image: findProduct("310ar-blanco").image,
     quantity: 1,
     price: 446.85,
     originalPrice: 603.85,
     currency: "MXN",
     wholesaleLabel: "Precios mayoreo 3 pares surtidos",
-  },
-];
+  }),
+].filter((item): item is CartItem => item !== null);
