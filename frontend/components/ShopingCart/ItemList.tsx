@@ -31,7 +31,7 @@ export default function ItemList({
       <Link
         href={`/productos/${item.slug}`}
         onClick={onLinkClick}
-        className="w-20 h-20 sm:w-28 sm:h-28 shrink-0 rounded-lg overflow-hidden bg-gray-100"
+        className="relative w-20 h-20 sm:w-28 sm:h-28 shrink-0 rounded-lg overflow-hidden bg-gray-100"
       >
         {item.image ? (
             /* Corregir los estilos cuando utilicemos imagenes reales */
@@ -39,7 +39,8 @@ export default function ItemList({
                 src={item.image}
                 alt={item.name}
                 fill
-                className="w-full h-full object-cover"
+                sizes="(max-width: 640px) 80px, 112px"
+                className="object-cover"
             />
           
         ) : (
