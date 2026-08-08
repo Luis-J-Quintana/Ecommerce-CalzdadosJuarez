@@ -17,6 +17,7 @@ export interface Product {
   cantMinMayoreo: number; /* Cantidad minima para ser mayorista*/
   image: string;
   hoverImage?: string;
+  gallery?: string[];
   sizes: string[];
   inStock: boolean;
   soldCount: number; /*Cantidad vendidos - Lo usa FilterBar para dar "más vendidos" */
@@ -27,4 +28,8 @@ export interface Product {
   slug?: string;
   currency?: string;
   installments?: number;
+
+  /*Lo usa la vista detalle Producto */
+  descripcion?: string;
+  material?: string; 
 }

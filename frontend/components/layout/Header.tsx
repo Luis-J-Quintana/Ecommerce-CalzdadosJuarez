@@ -1,5 +1,7 @@
 "use client"
 import Link from 'next/link';
+import Image from 'next/image'; // 1. Importar el componente Image de Next.js
+import Logo from '@/icons/LogoCalzadosV2.png'; // 2. Importar tu imagen
 import { usePathname } from "next/navigation";
 import { categories } from "@/lib/categories";
 import { useScrollDirection } from "@/hooks/useScrollDirection";
@@ -71,15 +73,21 @@ export default function Header() {
           <ul className="grid grid-cols-3 items-center px-4 h-12">
             {/* Columna izquierda */}
             <li className="flex items-center gap-3 justify-self-start">
-              <button onClick={() =>{setMenuOpened(!menuOpened)}}>                
+              <button onClick={() =>{setMenuOpened(!menuOpened)}}>
                 <CustomIcon icon={menuOpened ? AiOutlineClose : IoMdMenu} size={30} color='black'/>
               </button>
             </li>
 
             {/* Columna centro */}
             <li className="justify-self-center">
-              <Link href="/" onClick={() => setMenuOpened(false)}>
-                <span className="font-bold text-lg">LOGO</span>
+              <Link href="/" onClick={() => setMenuOpened(false)} className="flex items-center">
+                <Image 
+                  src={Logo} 
+                  alt="Logo Calzados" 
+                  height={36} // Ajusta la altura según tu diseño (la barra mide h-12)
+                  className="object-contain width-auto"
+                  priority 
+                />
               </Link>
             </li>
 
