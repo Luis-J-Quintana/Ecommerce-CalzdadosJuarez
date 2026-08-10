@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { FcGoogle } from "react-icons/fc";
+import CustomIcon from "../layout/CustomIcon";
 import { loginAction, type LoginState } from "@/app/actions/auth";
 
 const initialState: LoginState = {};
@@ -22,7 +23,7 @@ export default function LoginForm() {
           }}
           className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 py-3 font-semibold transition-colors hover:bg-gray-50"
         >
-          <FcGoogle size={20} />
+          <CustomIcon icon={FcGoogle} size={20}/>
           Iniciar sesión con Google
         </button>
 
@@ -53,7 +54,7 @@ export default function LoginForm() {
             className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-black"
           />
 
-          <Link href="/olvide-password" className="-mt-1 self-start text-sm underline">
+          <Link href="/forgot-password" className="-mt-1 self-start text-sm underline">
             ¿Olvidaste tu contraseña?
           </Link>
 
