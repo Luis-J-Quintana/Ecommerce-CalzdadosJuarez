@@ -1,6 +1,9 @@
-// lib/auth.ts
 export type AuthResult =
-  | { success: true; customer: { id: string; email: string; firstName: string } }
+  | { success: true; customer: { id: string; email: string } }
+  | { success: false; error: string };
+
+export type ForgotPasswordResult =
+  | { success: true }
   | { success: false; error: string };
 
 export async function login(email: string, password: string): Promise<AuthResult> {
@@ -10,16 +13,16 @@ export async function login(email: string, password: string): Promise<AuthResult
 }
 
 export async function register(data: {
-  email: string;
-  password: string;
   firstName: string;
   lastName: string;
+  email: string;
+  password: string;
 }): Promise<AuthResult> {
   // TODO: reemplazar por fetch a `${MEDUSA_BACKEND_URL}/store/customers`
   return { success: false, error: "Auth aún no conectado al backend" };
 }
 
-export async function getCurrentCustomer() {
-  // TODO: reemplazar por fetch a `${MEDUSA_BACKEND_URL}/store/customers/me`
-  return null;
+export async function requestPasswordReset(email: string): Promise<ForgotPasswordResult> {
+  // TODO: reemplazar por fetch a `${MEDUSA_BACKEND_URL}/store/customers/password-token`
+  return { success: false, error: "Auth aún no conectado al backend" };
 }
