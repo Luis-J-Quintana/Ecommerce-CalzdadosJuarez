@@ -14,6 +14,7 @@ import S42 from "@/icons/SandaliasTest/SandaliaTest4-2.jpg"
 export const products: Product[] = [
   {
     id: "2502r-rojo",
+    slug: "2502r-rojo",
     code: "2502R",
     name: "Sintético Rojo",
     categoria: "casuales",
@@ -28,10 +29,11 @@ export const products: Product[] = [
     createdAt: "2026-01-15",
     rating: 5,
     reviewsCount: 13,
-    isNew: true
+    isNew: true,
   },
   {
     id: "2501r-nairobi-late",
+    slug: "2501r-nairobi-late",
     code: "2501R",
     name: "Zapatilla Sintético Nairobi Late",
     categoria: "zapatillas",
@@ -51,6 +53,7 @@ export const products: Product[] = [
   },
   {
     id: "2502r-late",
+    slug: "2502r-late",
     code: "2502R",
     name: "Zapatilla Sintético Late",
     categoria: "zapatillas",
@@ -70,6 +73,7 @@ export const products: Product[] = [
   },
   {
     id: "2503r-yute-natural",
+    slug: "2503r-yute-natural",
     code: "2503R",
     name: "Yute Natural/Nairobi Sándalo",
     categoria: "sandalias",

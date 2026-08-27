@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Header from "../components/layout/Header"
 import Footer from "../components/layout/Footer"
+import { CartProvider } from "@/lib/cartContex";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,11 +19,11 @@ export default function RootLayout({
       lang="es"
     >
       <body className="min-h-screen flex flex-col">
-        <Header></Header>
-        <main className="flex-1 pb-16 sm:pb-20">{children}</main>
-        <Footer></Footer>
-
-
+        <CartProvider>
+          <Header></Header>
+          <main className="flex-1 pb-16 sm:pb-20">{children}</main>
+          <Footer></Footer>
+        </CartProvider>
       </body>
     </html>
   );
