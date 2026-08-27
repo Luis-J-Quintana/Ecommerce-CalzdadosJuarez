@@ -29,7 +29,7 @@ export const products: Product[] = [
     createdAt: "2026-01-15",
     rating: 5,
     reviewsCount: 13,
-    isNew: true
+    isNew: true,
   },
   {
     id: "2501r-nairobi-late",
