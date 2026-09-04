@@ -1,7 +1,8 @@
+// lib/cartContext.tsx
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
-import { cartProducts as initialCartProducts, type CartItem } from "@/lib/cartProducts";
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { getOrCreateCart, type CartItem } from "@/lib/cartProducts";
 
 type CartContextValue = {
   items: CartItem[];
@@ -12,18 +13,18 @@ type CartContextValue = {
 
 const CartContext = createContext<CartContextValue | null>(null);
 
-/**
- * Fuente única de verdad del carrito. Envuelve la app (ver layout raíz)
- * para que tanto SideListProducts (header) como OrderSummary (checkout)
- * lean y modifiquen exactamente el mismo estado.
- */
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>(initialCartProducts);
+  const [items, setItems] = useState<CartItem[]>([]);
+
+  useEffect(() => {
+    getOrCreateCart().then(setItems);
+  }, []);
 
   function increase(id: string) {
     setItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, quantity: item.quantity + 1 } : item))
     );
+    // TODO: llamar a Medusa (updateLineItemQuantity) para persistir el cambio real
   }
 
   function decrease(id: string) {
@@ -32,10 +33,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         item.id === id ? { ...item, quantity: Math.max(1, item.quantity - 1) } : item
       )
     );
+    // TODO: llamar a Medusa (updateLineItemQuantity)
   }
 
   function remove(id: string) {
     setItems((prev) => prev.filter((item) => item.id !== id));
+    // TODO: llamar a Medusa (removeLineItem)
   }
 
   return (
