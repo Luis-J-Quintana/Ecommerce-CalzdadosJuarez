@@ -1,6 +1,8 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { Modules } from "@medusajs/framework/utils";
 
+// TODO: add new http methods for: POST the increment/decrement of a product in the cart, 
+// DELETE(maybe we should use a flag to "delete" the product instead to use the delete method)
 export async function GET(
   req: MedusaRequest,
   res: MedusaResponse 
@@ -26,9 +28,19 @@ const totalPairs = (cart.items ?? []).reduce(
   ];
 
   const appliedTier = tiers.find((tier) => totalPairs >= tier.min);
-
+  console.log('pares:', totalPairs)
   res.json({
     total_pairs: totalPairs,
     wholesale_label: appliedTier?.label ?? null,
   });
 }
+
+//POST increment quantity of the selected prduct in the cart
+/* export async function POST(
+  req: MedusaRequest,
+  res: MedusaResponse
+): Promise<void> {
+  res.json({
+    data: 'hello dawg'
+  });
+} */

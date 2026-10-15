@@ -51,13 +51,15 @@ function mapLineItem(item: any): CartItem {
   };
 }
 
-export async function getOrCreateCart(): Promise<CartItem[]> {
+export async function getOrCreateCart(): Promise<{ cartId: string; items: CartItem[] }> {
   let cartId = getCartId();
 
   if (cartId) {
     try {
       const { cart } = await sdk.store.cart.retrieve(cartId);
-      return (cart.items ?? []).map(mapLineItem); // <- aquí se usa el adaptador
+      
+      console.log(JSON.stringify(cart.items, null, 2));
+      return { cartId: cart.id, items: (cart.items ?? []).map(mapLineItem) }; // <- aquí se usa el adaptador
     } catch {
       cartId = null;
     }
@@ -65,5 +67,23 @@ export async function getOrCreateCart(): Promise<CartItem[]> {
 
   const { cart } = await sdk.store.cart.create({ currency_code: "mxn" });
   setCartId(cart.id);
-  return [];
+  return { cartId: cart.id, items: [] };
+}
+
+export async function updateLineItemQuantity(
+  cartId: string,
+  lineItemId: string,
+  quantity: number
+): Promise<CartItem[]> {
+  const { cart } = await sdk.store.cart.updateLineItem(cartId, lineItemId, { quantity });
+  return (cart.items ?? []).map(mapLineItem);
+}
+
+export async function removeLineItem(
+  cartId: string,
+  lineItemId: string
+): Promise<CartItem[]> {
+  await sdk.store.cart.deleteLineItem(cartId, lineItemId);
+  const { cart } = await sdk.store.cart.retrieve(cartId);
+  return (cart.items ?? []).map(mapLineItem);
 }
