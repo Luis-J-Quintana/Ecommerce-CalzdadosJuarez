@@ -29,7 +29,7 @@ export default function ItemList({
           ? "max-h-0 py-0 opacity-0 scale-95"
           : "max-h-96 py-5 opacity-100 scale-100"}`}>
       <Link
-        href={`/productos/${item.slug}`}
+        href={item.slug ? `/catalogo/calzado/${item.slug}` : "#"}
         onClick={onLinkClick}
         className="relative w-20 h-20 sm:w-28 sm:h-28 shrink-0 rounded-lg overflow-hidden bg-gray-100"
       >
@@ -50,7 +50,11 @@ export default function ItemList({
 
       <div className="flex flex-1 min-w-0 flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
-          <Link href={`/productos/${item.slug}`} onClick={onLinkClick} className="min-w-0">
+          <Link
+            href={item.slug ? `/catalogo/calzado/${item.slug}` : "#"}
+            onClick={onLinkClick}
+            className="min-w-0"
+          >
             <span className="font-bold text-base leading-tight line-clamp-2 wrap-break-word">
               {item.name}
             </span>

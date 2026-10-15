@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useCart } from "@/lib/cartContex";
 import { formatPrice } from "@/lib/utils";
 import OrderSummaryItem from "./OrderSummaryItem";
+import WholesaleProgressBar from "../ShopingCart/WholesaleProgressBar";
 
 export default function OrderSummary() {
-  const { items, increase, decrease, remove } = useCart();
+  const { items, isWholesale, increase, decrease, remove } = useCart();
   const [discountCode, setDiscountCode] = useState("");
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -15,6 +16,9 @@ export default function OrderSummary() {
   return (
     <div className="bg-rose-50/40 px-6 pb-8 pt-14 sm:px-10 lg:h-full lg:px-12">
       <div className="flex flex-col gap-6 lg:sticky lg:top-14">
+        {/* Barra de progreso o confirmación de mayoreo */}
+        <WholesaleProgressBar />
+
         <div className="flex flex-col gap-4">
           {items.map((item) => (
             <OrderSummaryItem
@@ -58,7 +62,14 @@ export default function OrderSummary() {
         </div>
 
         <div className="flex items-center justify-between border-t border-gray-200 pt-4">
-          <span className="text-base font-semibold">Total</span>
+          <div>
+            <span className="text-base font-semibold">Total</span>
+            {isWholesale && (
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+                Precio de mayoreo aplicado
+              </p>
+            )}
+          </div>
           <div className="text-right">
             <span className="mr-1 align-middle text-xs text-gray-500">MXN</span>
             <span className="text-lg font-bold">{formatPrice(subtotal, "MXN")}</span>
