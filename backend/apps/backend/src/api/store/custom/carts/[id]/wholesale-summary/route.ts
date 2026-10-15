@@ -3,6 +3,8 @@ import { Modules } from "@medusajs/framework/utils";
 
 // TODO: add new http methods for: POST the increment/decrement of a product in the cart, 
 // DELETE(maybe we should use a flag to "delete" the product instead to use the delete method)
+const WHOLESALE_THRESHOLD = 15;
+
 export async function GET(
   req: MedusaRequest,
   res: MedusaResponse 
@@ -14,33 +16,18 @@ export async function GET(
     relations: ["items"],
   });
 
-const totalPairs = (cart.items ?? []).reduce(
-  (sum, item) => sum + Number(item.quantity),
-  0
-);
+  const totalPairs = (cart.items ?? []).reduce(
+    (sum, item) => sum + Number(item.quantity || 0),
+    0
+  );
 
-  // TODO: definir tus umbrales reales (3, 6, 12, 18 pares)
-  const tiers = [
-    { min: 18, label: "Precio mayoreo 18 pares surtidos" },
-    { min: 12, label: "Precio mayoreo 12 pares surtidos" },
-    { min: 6, label: "Precio mayoreo 6 pares surtidos" },
-    { min: 3, label: "Precio mayoreo 3 pares surtidos" },
-  ];
+  const isWholesale = totalPairs >= WHOLESALE_THRESHOLD;
 
-  const appliedTier = tiers.find((tier) => totalPairs >= tier.min);
-  console.log('pares:', totalPairs)
   res.json({
     total_pairs: totalPairs,
-    wholesale_label: appliedTier?.label ?? null,
+    wholesale_applied: isWholesale,
+    threshold: WHOLESALE_THRESHOLD,
+    pairs_remaining: Math.max(0, WHOLESALE_THRESHOLD - totalPairs),
+    wholesale_label: isWholesale ? "Precio de mayoreo (15+ pares)" : null,
   });
 }
-
-//POST increment quantity of the selected prduct in the cart
-/* export async function POST(
-  req: MedusaRequest,
-  res: MedusaResponse
-): Promise<void> {
-  res.json({
-    data: 'hello dawg'
-  });
-} */
