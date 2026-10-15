@@ -1,6 +1,9 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "./types";
+import { useCart } from "@/lib/cartContex";
 
 interface ProductCardProps {
   product: Product;
@@ -32,6 +35,11 @@ Tarjeta individual de producto dentro del catálogo.
 */
 export default function ProductCard({ product }: ProductCardProps) {
   const detailHref = `/catalogo/${product.categoria}/${product.slug}`;
+  const { addItem } = useCart();
+
+  const handleAddToCart = (variantId: string, quantity: number) => {
+    addItem(variantId, quantity, product.name);
+  };
 
   return (
     <div className="flex flex-col">
@@ -45,9 +53,8 @@ export default function ProductCard({ product }: ProductCardProps) {
             alt={product.name}
             fill
             sizes="(max-width: 768px) 50vw, 25vw"
-            className={`object-cover transition-opacity duration-300 ${
-              product.hoverImage ? "group-hover:opacity-0" : ""
-            }`}
+            className={`object-cover transition-opacity duration-300 ${product.hoverImage ? "group-hover:opacity-0" : ""
+              }`}
           />
           {/* Imagen hover. Se omite por completo si el producto no tiene hoverImage. */}
           {product.hoverImage && (
@@ -102,6 +109,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       <button
         type="button"
         disabled={!product.inStock}
+        //onClick={() => handleAddToCart(product.id, product.quantity)} NOTE: la cantidad tira error proque los productos en el frontend no vienen de la BD
         className="mt-3 w-full bg-black py-3 text-sm font-semibold uppercase tracking-wide text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
       >
         {product.inStock ? "Agregar al carrito" : "Agotado"}

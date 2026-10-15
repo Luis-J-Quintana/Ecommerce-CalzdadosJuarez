@@ -32,4 +32,6 @@ export interface Product {
   /*Lo usa la vista detalle Producto */
   descripcion?: string;
   material?: string; 
+  wholesaleTiers?: Array<{ quantity: number; price?: number; pricePerUnit?: number }>;
+  variants?: Array<{ id: string; title: string; [key: string]: any }>;
 }

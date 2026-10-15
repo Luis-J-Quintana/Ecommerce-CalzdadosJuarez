@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Product } from "../types";
+import { useCart } from "@/lib/cartContex";
 import ProductImageGallery from "./ProductImageGallery";
 import AccordionSection from "./AccordionSection";
 import { SizeGuideContent, ShippingReturnsContent } from "./staticSections";
@@ -17,12 +18,31 @@ export default function ProductDetailView({ product }: ProductDetailViewProps) {
   const [selectedSize, setSelectedSize] = useState<string | null>(
     product.sizes[0] ?? null
   );
+  const [isAdding, setIsAdding] = useState(false);
+  const { addItem } = useCart();
 
   // Si no hay galería definida (mock viejo), cae de vuelta a image/hoverImage
   const images =
     product.gallery && product.gallery.length > 0
       ? product.gallery
       : [product.image, product.hoverImage].filter((src): src is string => Boolean(src));
+
+  async function handleAddToCart() {
+    if (!selectedSize || !product.inStock || isAdding) return;
+
+    // Buscar si existe un variant_id en las variantes del producto
+    const variant = product.variants?.find(
+      (v) => v.title === selectedSize || v.size === selectedSize
+    );
+    const variantId = variant?.id || `${product.id}-${selectedSize}`;
+
+    setIsAdding(true);
+    try {
+      await addItem(variantId, 1, `${product.name} (Talla ${selectedSize})`);
+    } finally {
+      setIsAdding(false);
+    }
+  }
 
   return (
     <div className="grid grid-cols-1 gap-10 px-6 pb-8 pt-8 sm:px-8 lg:grid-cols-2 lg:px-12">
@@ -69,10 +89,20 @@ export default function ProductDetailView({ product }: ProductDetailViewProps) {
         {/* Agregar al carrito */}
         <button
           type="button"
-          disabled={!product.inStock}
-          className="mt-6 w-full bg-black py-4 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+          onClick={handleAddToCart}
+          disabled={!product.inStock || isAdding || !selectedSize}
+          className="mt-6 flex w-full items-center justify-center gap-2 bg-black py-4 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
-          {product.inStock ? "Agregar al carrito" : "Agotado"}
+          {isAdding ? (
+            <>
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              Agregando al carrito...
+            </>
+          ) : !product.inStock ? (
+            "Agotado"
+          ) : (
+            "Agregar al carrito"
+          )}
         </button>
         {/* Desplegables */}
         <div className="mt-8">

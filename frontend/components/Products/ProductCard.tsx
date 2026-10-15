@@ -26,7 +26,7 @@ export default function ProductCard({ product }: { product: Product }) {
 
       <h3 className="mt-4 text-base font-bold text-neutral-900">{product.name}</h3>
       <p className="mt-1 text-base text-neutral-900">
-        {formatPrice(product.price, product.currency)}
+        {formatPrice(product.price, product.currency ?? "MXN")}
       </p>
 
       {product.installments && (
@@ -44,7 +44,7 @@ export default function ProductCard({ product }: { product: Product }) {
             >
               {tier.quantity} pares:{" "}
               <strong className="text-neutral-900">
-                {formatPrice(tier.pricePerUnit, product.currency)}
+                {formatPrice(tier.pricePerUnit ?? tier.price ?? 0, product.currency ?? "MXN")}
               </strong>{" "}
               c/u
             </span>
