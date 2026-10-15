@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { Product } from "../types";
+import { useCart } from "@/lib/cartContex";
 import ProductImageGallery from "./ProductImageGallery";
 import AccordionSection from "./AccordionSection";
 import { SizeGuideContent, ShippingReturnsContent } from "./staticSections";
@@ -14,31 +15,34 @@ interface ProductDetailViewProps {
  * Vista de detalle de producto
  */
 export default function ProductDetailView({ product }: ProductDetailViewProps) {
-  // Variantes ordenadas por talla
-  const variants = useMemo(
-    () =>
-      [...product.variants].sort((a, b) =>
-        a.talla.localeCompare(b.talla, undefined, { numeric: true })
-      ),
-    [product.variants]
-  );
-
-  // Talla inicial: la primera que tenga existencias (o la primera si todas están agotadas)
   const [selectedSize, setSelectedSize] = useState<string | null>(
-    (variants.find((v) => v.inStock) ?? variants[0])?.talla ?? null
+    product.sizes[0] ?? null
   );
+  const [isAdding, setIsAdding] = useState(false);
+  const { addItem } = useCart();
 
-  const selectedVariant = variants.find((v) => v.talla === selectedSize);
-
-  // Precio de la variante elegida; si no hay, el precio "desde" del producto
-  const displayPrice = selectedVariant?.precio || product.price;
-  const canBuy = !!selectedVariant && selectedVariant.inStock;
-
-  // Si no hay galería definida, cae de vuelta a image/hoverImage
+  // Si no hay galería definida (mock viejo), cae de vuelta a image/hoverImage
   const images =
     product.gallery && product.gallery.length > 0
       ? product.gallery
       : [product.image, product.hoverImage].filter((src): src is string => Boolean(src));
+
+  async function handleAddToCart() {
+    if (!selectedSize || !product.inStock || isAdding) return;
+
+    // Buscar si existe un variant_id en las variantes del producto
+    const variant = product.variants?.find(
+      (v) => v.title === selectedSize || v.size === selectedSize
+    );
+    const variantId = variant?.id || `${product.id}-${selectedSize}`;
+
+    setIsAdding(true);
+    try {
+      await addItem(variantId, 1, `${product.name} (Talla ${selectedSize})`);
+    } finally {
+      setIsAdding(false);
+    }
+  }
 
   return (
     <div className="grid grid-cols-1 gap-10 px-6 pb-8 pt-8 sm:px-8 lg:grid-cols-2 lg:px-12">
@@ -47,10 +51,10 @@ export default function ProductDetailView({ product }: ProductDetailViewProps) {
       {/* Info del producto */}
       <div>
         <h1 className="text-3xl font-black">
-          {[product.code, product.name].filter(Boolean).join(" ")}
+          {product.code} {product.name}
         </h1>
         <p className="mt-2 text-2xl font-bold">
-          ${displayPrice.toFixed(2)} {product.currency ?? "MXN"}
+          ${product.price.toFixed(2)} {product.currency ?? "MXN"}
         </p>
         {/* Precio de mayoreo*/}
         <p className="mt-1 text-sm text-gray-700">
@@ -64,42 +68,41 @@ export default function ProductDetailView({ product }: ProductDetailViewProps) {
         <div className="mt-6">
           <p className="text-sm font-semibold">
             Talla del calzado{selectedSize ? `: ${selectedSize}` : ""}
-            {selectedVariant && !selectedVariant.inStock && (
-              <span className="ml-2 font-normal text-red-600">Agotada</span>
-            )}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
-            {variants.map((v) => {
-              const isSelected = selectedSize === v.talla;
-              return (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => setSelectedSize(v.talla)}
-                  aria-disabled={!v.inStock}
-                  title={v.inStock ? undefined : "Talla agotada"}
-                  className={`h-11 w-11 rounded-full border text-sm font-medium transition-colors ${
-                    isSelected
-                      ? "border-black bg-black text-white"
-                      : v.inStock
-                        ? "border-gray-300 text-black hover:border-black"
-                        : "border-gray-200 text-gray-300 line-through hover:border-gray-300"
-                  } ${!v.inStock && isSelected ? "bg-gray-400 border-gray-400" : ""}`}
-                >
-                  {v.talla}
-                </button>
-              );
-            })}
+            {product.sizes.map((size) => (
+              <button
+                key={size}
+                type="button"
+                onClick={() => setSelectedSize(size)}
+                className={`h-11 w-11 rounded-full border text-sm font-medium transition-colors ${
+                  selectedSize === size
+                    ? "border-black bg-black text-white"
+                    : "border-gray-300 text-black hover:border-black"
+                }`}
+              >
+                {size}
+              </button>
+            ))}
           </div>
         </div>
         {/* Agregar al carrito */}
         <button
           type="button"
-          disabled={!canBuy}
-          data-variant-id={selectedVariant?.id}
-          className="mt-6 w-full bg-black py-4 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+          onClick={handleAddToCart}
+          disabled={!product.inStock || isAdding || !selectedSize}
+          className="mt-6 flex w-full items-center justify-center gap-2 bg-black py-4 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
-          {canBuy ? "Agregar al carrito" : "Agotado"}
+          {isAdding ? (
+            <>
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              Agregando al carrito...
+            </>
+          ) : !product.inStock ? (
+            "Agotado"
+          ) : (
+            "Agregar al carrito"
+          )}
         </button>
         {/* Desplegables */}
         <div className="mt-8">

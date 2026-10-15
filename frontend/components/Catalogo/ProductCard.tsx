@@ -1,6 +1,9 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "./types";
+import { useCart } from "@/lib/cartContex";
 
 interface ProductCardProps {
   product: Product;
@@ -45,9 +48,8 @@ export default function ProductCard({ product }: ProductCardProps) {
             alt={product.name}
             fill
             sizes="(max-width: 768px) 50vw, 25vw"
-            className={`object-cover transition-opacity duration-300 ${
-              product.hoverImage ? "group-hover:opacity-0" : ""
-            }`}
+            className={`object-cover transition-opacity duration-300 ${product.hoverImage ? "group-hover:opacity-0" : ""
+              }`}
           />
           {/* Imagen hover. Se omite por completo si el producto no tiene hoverImage. */}
           {product.hoverImage && (

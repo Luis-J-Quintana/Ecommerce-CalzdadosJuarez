@@ -1,4 +1,5 @@
 import type { Product } from "@/components/Catalogo/types";
+export type { Product };
 import S11 from "@/icons/SandaliasTest/SandaliaTest1-1.jpg"
 import S12 from "@/icons/SandaliasTest/SandaliaTest1-2.jpg"
 import S21 from "@/icons/SandaliasTest/SandaliaTest2-1.jpg"
