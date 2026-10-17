@@ -34,12 +34,16 @@ interface FilterBarProps {
   sizes: string[];
   selectedSize: string | null;
   onSizeChange: (size: string | null) => void;
+  /* Tipos (subcategorías) disponibles, calculados a partir de los productos visibles */
+  categories: { handle: string; name: string }[];
+  selectedCategory: string | null;
+  onCategoryChange: (handle: string | null) => void;
   sortBy: SortOption;
   onSortChange: (sort: SortOption) => void;
 }
 
 /*
-Ícono de flecha de los filtors
+Ícono de flecha de los filtros
 */
 function ChevronIcon({ open }: { open: boolean }) {
   return (
@@ -107,7 +111,7 @@ function FilterDropdown({
 
 /**
 Barra de filtros y ordenamiento del catálogo.
-Renderiza tres filtros (Precio, Disponibilidad, Talla del calzado).
+Renderiza cuatro filtros (Precio, Disponibilidad, Tipo, Talla del calzado).
 */
 export default function FilterBar({
   totalCount,
@@ -119,6 +123,9 @@ export default function FilterBar({
   sizes,
   selectedSize,
   onSizeChange,
+  categories,
+  selectedCategory,
+  onCategoryChange,
   sortBy,
   onSortChange,
 }: FilterBarProps) {
@@ -132,6 +139,7 @@ export default function FilterBar({
       {/* Bloque izquierdo: filtros */}
       <div className="flex flex-wrap items-center gap-6">
         <span className="text-sm text-gray-500">Filtrar:</span>
+
         {/* Filtro de precio*/}
         <FilterDropdown label="Precio">
           <div className="flex flex-col gap-3">
@@ -170,6 +178,7 @@ export default function FilterBar({
             </button>
           </div>
         </FilterDropdown>
+
         {/* Filtro de disponibilidad*/}
         <FilterDropdown label="Disponibilidad">
           <div className="flex flex-col gap-2 text-sm">
@@ -189,6 +198,39 @@ export default function FilterBar({
             ))}
           </div>
         </FilterDropdown>
+
+        {/* Filtro de tipo (subcategoría): se oculta si solo hay una opción */}
+        {categories.length > 0 && (
+          <FilterDropdown label="Tipo">
+            <div className="flex max-h-48 flex-col gap-2 overflow-y-auto text-sm">
+              {/* Opción para quitar el filtro de tipo y mostrar todos */}
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="category"
+                  checked={selectedCategory === null}
+                  onChange={() => onCategoryChange(null)}
+                />
+                Todos
+              </label>
+              {categories.map((c) => (
+                <label
+                  key={c.handle}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <input
+                    type="radio"
+                    name="category"
+                    checked={selectedCategory === c.handle}
+                    onChange={() => onCategoryChange(c.handle)}
+                  />
+                  {c.name}
+                </label>
+              ))}
+            </div>
+          </FilterDropdown>
+        )}
+
         {/* Filtro de talla*/}
         <FilterDropdown label="Talla del calzado">
           <div className="flex max-h-48 flex-col gap-2 overflow-y-auto text-sm">
@@ -216,6 +258,7 @@ export default function FilterBar({
           </div>
         </FilterDropdown>
       </div>
+
       {/* Bloque derecho: orden y contador de resultados */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2 text-sm">

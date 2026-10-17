@@ -31,7 +31,7 @@ function Stars({ rating }: { rating: number }) {
 Tarjeta individual de producto dentro del catálogo.
 */
 export default function ProductCard({ product }: ProductCardProps) {
-  const detailHref = `/catalogo/${product.categoria}/${product.slug}`;
+  const detailHref = `/catalogo/${product.categoria || "todos"}/${product.slug}`;
 
   return (
     <div className="flex flex-col">

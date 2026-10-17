@@ -39,6 +39,17 @@ export default function CatalogView({ title, products }: CatalogViewProps) {
     return Array.from(set).sort();
   }, [products]);
 
+  // Es la lista que muestra el filtro "Tipo" (subcategorías de los productos mostrados)
+  const allCategories = useMemo(() => {
+    const map = new Map<string, string>();
+    products.forEach((p) =>
+      (p.categoriasInfo ?? []).forEach((c) => map.set(c.handle, c.name))
+    );
+    return Array.from(map, ([handle, name]) => ({ handle, name })).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+  }, [products]);
+
   // Estado de los filtros y el orden actualmente seleccionados
   const [priceRange, setPriceRange] = useState<[number, number]>([
     priceBounds.min,
@@ -46,6 +57,7 @@ export default function CatalogView({ title, products }: CatalogViewProps) {
   ]);
   const [availability, setAvailability] = useState<AvailabilityFilter>("todos");
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("mas-vendidos");
 
   // Aplica los filtros activos y luego ordena el resultado según `sortBy`.
@@ -60,6 +72,8 @@ export default function CatalogView({ title, products }: CatalogViewProps) {
       if (availability === "agotado" && p.inStock) return false;
       // Filtro de talla
       if (selectedSize && !p.sizes.includes(selectedSize)) return false;
+      // Filtro de tipo (subcategoría)
+      if (selectedCategory && !p.categorias.includes(selectedCategory)) return false;
       return true;
     });
 
@@ -83,7 +97,7 @@ export default function CatalogView({ title, products }: CatalogViewProps) {
           return 0;
       }
     });
-  }, [products, priceRange, availability, selectedSize, sortBy]);
+  }, [products, priceRange, availability, selectedSize, selectedCategory, sortBy]);
 
   return (
     <div>
@@ -99,6 +113,9 @@ export default function CatalogView({ title, products }: CatalogViewProps) {
         sizes={allSizes}
         selectedSize={selectedSize}
         onSizeChange={setSelectedSize}
+        categories={allCategories}
+        selectedCategory={selectedCategory}
+        onCategoryChange={setSelectedCategory}
         sortBy={sortBy}
         onSortChange={setSortBy}
       />

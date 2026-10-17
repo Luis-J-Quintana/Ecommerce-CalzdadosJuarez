@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Product } from "../types";
 import ProductImageGallery from "./ProductImageGallery";
 import AccordionSection from "./AccordionSection";
@@ -14,11 +14,27 @@ interface ProductDetailViewProps {
  * Vista de detalle de producto
  */
 export default function ProductDetailView({ product }: ProductDetailViewProps) {
-  const [selectedSize, setSelectedSize] = useState<string | null>(
-    product.sizes[0] ?? null
+  // Variantes ordenadas por talla
+  const variants = useMemo(
+    () =>
+      [...product.variants].sort((a, b) =>
+        a.talla.localeCompare(b.talla, undefined, { numeric: true })
+      ),
+    [product.variants]
   );
 
-  // Si no hay galería definida (mock viejo), cae de vuelta a image/hoverImage
+  // Talla inicial: la primera que tenga existencias (o la primera si todas están agotadas)
+  const [selectedSize, setSelectedSize] = useState<string | null>(
+    (variants.find((v) => v.inStock) ?? variants[0])?.talla ?? null
+  );
+
+  const selectedVariant = variants.find((v) => v.talla === selectedSize);
+
+  // Precio de la variante elegida; si no hay, el precio "desde" del producto
+  const displayPrice = selectedVariant?.precio || product.price;
+  const canBuy = !!selectedVariant && selectedVariant.inStock;
+
+  // Si no hay galería definida, cae de vuelta a image/hoverImage
   const images =
     product.gallery && product.gallery.length > 0
       ? product.gallery
@@ -31,10 +47,10 @@ export default function ProductDetailView({ product }: ProductDetailViewProps) {
       {/* Info del producto */}
       <div>
         <h1 className="text-3xl font-black">
-          {product.code} {product.name}
+          {[product.code, product.name].filter(Boolean).join(" ")}
         </h1>
         <p className="mt-2 text-2xl font-bold">
-          ${product.price.toFixed(2)} {product.currency ?? "MXN"}
+          ${displayPrice.toFixed(2)} {product.currency ?? "MXN"}
         </p>
         {/* Precio de mayoreo*/}
         <p className="mt-1 text-sm text-gray-700">
@@ -48,31 +64,42 @@ export default function ProductDetailView({ product }: ProductDetailViewProps) {
         <div className="mt-6">
           <p className="text-sm font-semibold">
             Talla del calzado{selectedSize ? `: ${selectedSize}` : ""}
+            {selectedVariant && !selectedVariant.inStock && (
+              <span className="ml-2 font-normal text-red-600">Agotada</span>
+            )}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
-            {product.sizes.map((size) => (
-              <button
-                key={size}
-                type="button"
-                onClick={() => setSelectedSize(size)}
-                className={`h-11 w-11 rounded-full border text-sm font-medium transition-colors ${
-                  selectedSize === size
-                    ? "border-black bg-black text-white"
-                    : "border-gray-300 text-black hover:border-black"
-                }`}
-              >
-                {size}
-              </button>
-            ))}
+            {variants.map((v) => {
+              const isSelected = selectedSize === v.talla;
+              return (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => setSelectedSize(v.talla)}
+                  aria-disabled={!v.inStock}
+                  title={v.inStock ? undefined : "Talla agotada"}
+                  className={`h-11 w-11 rounded-full border text-sm font-medium transition-colors ${
+                    isSelected
+                      ? "border-black bg-black text-white"
+                      : v.inStock
+                        ? "border-gray-300 text-black hover:border-black"
+                        : "border-gray-200 text-gray-300 line-through hover:border-gray-300"
+                  } ${!v.inStock && isSelected ? "bg-gray-400 border-gray-400" : ""}`}
+                >
+                  {v.talla}
+                </button>
+              );
+            })}
           </div>
         </div>
         {/* Agregar al carrito */}
         <button
           type="button"
-          disabled={!product.inStock}
+          disabled={!canBuy}
+          data-variant-id={selectedVariant?.id}
           className="mt-6 w-full bg-black py-4 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
-          {product.inStock ? "Agregar al carrito" : "Agotado"}
+          {canBuy ? "Agregar al carrito" : "Agotado"}
         </button>
         {/* Desplegables */}
         <div className="mt-8">

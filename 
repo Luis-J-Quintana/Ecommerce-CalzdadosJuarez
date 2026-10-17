@@ -1,0 +1,37 @@
+[33m9f8461b[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m chore: conectar base de datos y storage con Supabase
+[33m7bbfa81[m[33m ([m[1;32mintegracion-catalogo-home[m[33m)[m Merge branch 'feature/detelle-Producto-Pago' into integracion-catalogo-home
+[33m0ee2bfc[m[33m ([m[1;32mfeature/detelle-Producto-Pago[m[33m)[m Merge branch 'main' of https://github.com/Luis-J-Quintana/Ecommerce-CalzdadosJuarez into feature/detelle-Producto-Pago
+[33m0a0968b[m Merge pull request #4 from Luis-J-Quintana/feature/login-view
+[33mdab97a4[m feat(checkout):agregar vista de checkout con carrito compartido
+[33m6c5c952[m feat: crear Registro y Forgot-password views, extender el server action /auth.ts con nuevas funciones para registrar usuario y recuperar contraseña.
+[33m7b493db[m feat: agregar vista de detalle de producto
+[33m33a2ba6[m[33m ([m[1;32mfeature/login-view[m[33m)[m feat: crear vista login, añadir server actions que llama lib/auth.ts listo para conectar con el backend MedusaJS
+[33m47f5aec[m fix: corregir cantidaad de columnas en la sección categorías, adaptar estilos en itemList para usar immagenes reales de la carpeta /icons/SandalasTest
+[33m21a1bbe[m fix: corregir mock de cartProducts y reutilizar componentes de catálogo
+[33m8bd13ae[m fix (types.ts): integración de variables slug, currency, installments
+[33m8f5f71e[m Merge branch 'feature/Home-page' into integracion-catalogo-home
+[33m588855d[m Merge branch 'feature/catalogo' into integracion-catalogo-home
+[33mc268f34[m[33m ([m[1;32mfeature/catalogo[m[33m)[m feat(catalogo): agregar vista de catálogo con filtros, orden y precios mayoreo/menudeo
+[33mcda1a36[m[33m ([m[1;32mfeature/Home-page[m[33m)[m feat: completar el componente del carrito de compras, crear mock de datos de productos en /cartProducts.ts, crear un util para añadir formato a los precios, utilizar el icono cart del header para abrir la lista lateral de productos.
+[33m67cf812[m Merge pull request #2 from Luis-J-Quintana/componentes
+[33ma12aabf[m[33m ([m[1;32mcomponentes[m[33m)[m Merge branch 'feature/header' into componentes
+[33m004dcaa[m fix: arreglo de sobreposicionamiento sobre el contenido de la página
+[33m65ec087[m fix: arreglo de ruta de estilos
+[33me44f2e1[m fix: añadir botón para ver catálogo completo en la ultima sección de Home, corregir el comportamiento del cursor con respecto a los botones en el frontend, agregar comentarios de cosas para hacer en futuros tickets.
+[33ma3efeff[m Feat: Completar estructura inicial del Home, crear nuevos componentes para el Banner, seccion Categorías y Productos semanales, añadir mock de productos en /lib.
+[33mfaa95ac[m Fix: Cambiar paquetes de iconos y estandarizar iconos en el Header
+[33me65ea92[m fix: correción ruta de estilos, logo en carpeta icons
+[33m3cb449e[m merge: integración de feature/header y feature/footer en componentes
+[33mec7bfe5[m feat: creación footer y animación wave
+[33mc61e5e9[m[33m ([m[1;32mfeature/header[m[33m)[m feat: crear nuevas variables en global.css, y completar el contenido del SideMenu
+[33m3a3b047[m Instalar nuevo react-icons package
+[33md41de77[m feat: añadir doble header, crear hook para interactuar con el scroll, crear menú lateral, listar las categorías en un solo archivo y cambiar estilos por tamaños responsivos.
+[33mffb1b5e[m feat: añadir funcionamiento del doble header
+[33m3cd9b91[m feat(layout): agregar componentes Header y Footer
+[33m8f6b2e9[m fix: archivos corregidos
+[33m3df25d6[m chore(frontend): inicializar app de next.js
+[33m24bb5c1[m feat: setup medusa backend
+[33m395bcd2[m docs: guia contribuidor
+[33m4475b4a[m Merge branch 'main' of https://github.com/Luis-J-Quintana/Ecommerce-CalzdadosJuarez
+[33m402c4ef[m chore: configuracion inicial del proyecto
+[33m6290986[m Initial commit

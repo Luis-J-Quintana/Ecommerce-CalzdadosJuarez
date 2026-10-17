@@ -11,7 +11,6 @@ export interface Product {
   id: string;
   code: string;
   name: string; /* Nombre del producto */
-  categoria: string; /* Categoría a la que pertenece el producto - Debe ser igual a lo que hay en lib/categories */
   price: number; /* Precio individual */
   precioMayoreo: number; /*Precio mayoreo*/
   cantMinMayoreo: number; /* Cantidad minima para ser mayorista*/
@@ -31,5 +30,11 @@ export interface Product {
 
   /*Lo usa la vista detalle Producto */
   descripcion?: string;
-  material?: string; 
+  material?: string;
+
+  /* Campos del mapper*/
+  categoria: string;      // handle de la categoría principal (hija)
+  categorias: string[];   // todas las categorías del producto
+  categoriasInfo?: { handle: string; name: string }[]; // handle + nombre, para el filtro "Tipo"
+  variants: { id: string; talla: string; precio: number; inStock: boolean }[];
 }

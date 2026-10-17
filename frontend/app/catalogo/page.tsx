@@ -1,9 +1,9 @@
 import CatalogView from "@/components/Catalogo/CatalogoView";
-import { products } from "@/lib/products";
+import { getProducts } from "@/lib/medusa-products";
 
-/**
- * Es donde debe apuntar el botón "Ver todo" del home.
-*/
-export default function CatalogoTodoPage() {
+export const revalidate = 60; // refresca los datos cada 60 s
+
+export default async function CatalogoTodoPage() {
+  const products = await getProducts();
   return <CatalogView title="Todos los productos" products={products} />;
 }
