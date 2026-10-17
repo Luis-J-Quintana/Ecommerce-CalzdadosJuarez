@@ -98,14 +98,13 @@ export default function ProductCard({ product }: ProductCardProps) {
           </p>
         </div>
       </Link>
-      {/* Botón de compra: fuera del Link para que un click aquí no navegue */}
-      <button
-        type="button"
-        disabled={!product.inStock}
-        className="mt-3 w-full bg-black py-3 text-sm font-semibold uppercase tracking-wide text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+      {/* Botón que lleva a la página de detalle del producto */}
+      <Link
+        href={detailHref}
+        className="mt-3 block w-full bg-black py-3 text-center text-sm font-semibold uppercase tracking-wide text-white transition-colors hover:bg-gray-800"
       >
-        {product.inStock ? "Agregar al carrito" : "Agotado"}
-      </button>
+        Ver detalles
+      </Link>
     </div>
   );
 }
