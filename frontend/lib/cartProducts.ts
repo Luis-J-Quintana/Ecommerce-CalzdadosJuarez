@@ -138,7 +138,9 @@ export async function getOrCreateCart(): Promise<CartResponseData> {
     }
   }
 
-  const { cart } = await sdk.store.cart.create({ currency_code: "mxn" });
+  const { cart } = await sdk.store.cart.create({
+    region_id: process.env.NEXT_PUBLIC_MEDUSA_REGION_ID,
+  });
   setCartId(cart.id);
   const wholesale = computeFallbackWholesale([]);
   return { cartId: cart.id, items: [], wholesale };
