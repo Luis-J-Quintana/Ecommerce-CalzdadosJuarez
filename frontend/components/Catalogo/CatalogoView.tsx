@@ -73,7 +73,7 @@ export default function CatalogView({ title, products }: CatalogViewProps) {
       // Filtro de talla
       if (selectedSize && !p.sizes.includes(selectedSize)) return false;
       // Filtro de tipo (subcategoría)
-      if (selectedCategory && !p.categorias.includes(selectedCategory)) return false;
+      if (selectedCategory && !(p.categorias ?? []).includes(selectedCategory)) return false;
       return true;
     });
 
