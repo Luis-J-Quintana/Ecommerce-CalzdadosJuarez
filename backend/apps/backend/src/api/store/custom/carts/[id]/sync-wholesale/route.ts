@@ -1,11 +1,14 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import { WHOLESALE_MIN_QUANTITY } from "../../../../../../lib/wholesale-pricing";
 
-const WHOLESALE_THRESHOLD = 15;
+// El umbral de pares coincide con el min_quantity del precio de mayoreo.
+const WHOLESALE_THRESHOLD = WHOLESALE_MIN_QUANTITY;
 
 /**
  * POST /store/custom/carts/:id/sync-wholesale
- * Recalcula el unit_price de cada línea del carrito si se alcanza el umbral de 15 pares.
+ * Recalcula el unit_price de cada línea del carrito si se alcanza el umbral de
+ * WHOLESALE_THRESHOLD pares.
  */
 export async function POST(
   req: MedusaRequest,
@@ -65,9 +68,9 @@ export async function POST(
     let targetPrice: number | null = null;
 
     if (isWholesale) {
-      // 1. Buscar precio de mayoreo en prices con min_quantity = 15 o > 1
+      // 1. Buscar precio de mayoreo en prices con min_quantity >= WHOLESALE_MIN_QUANTITY o > 1
       const wholesaleFromPrices =
-        prices.find((p: any) => Number(p.min_quantity) === 15 || Number(p.min_quantity) >= 15) ??
+        prices.find((p: any) => Number(p.min_quantity) >= WHOLESALE_MIN_QUANTITY) ??
         prices.find((p: any) => p.min_quantity != null && Number(p.min_quantity) > 1);
 
       if (wholesaleFromPrices) {
@@ -141,7 +144,7 @@ export async function POST(
       total_pairs: totalPairs,
       threshold: WHOLESALE_THRESHOLD,
       pairs_remaining: Math.max(0, WHOLESALE_THRESHOLD - totalPairs),
-      wholesale_label: isWholesale ? "Precio de mayoreo (15+ pares)" : null,
+      wholesale_label: isWholesale ? `Precio de mayoreo (${WHOLESALE_THRESHOLD}+ pares)` : null,
     },
   });
 }
