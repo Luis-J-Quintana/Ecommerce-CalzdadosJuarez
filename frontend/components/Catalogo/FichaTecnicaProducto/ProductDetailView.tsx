@@ -30,11 +30,9 @@ export default function ProductDetailView({ product }: ProductDetailViewProps) {
   async function handleAddToCart() {
     if (!selectedSize || !product.inStock || isAdding) return;
 
-    // Buscar si existe un variant_id en las variantes del producto
-    const variant = product.variants?.find(
-      (v) => v.title === selectedSize || v.size === selectedSize
-    );
-    const variantId = variant?.id || `${product.id}-${selectedSize}`;
+    const variant = product.variants?.find((v) => v.talla === selectedSize);
+    if (!variant?.id) return;
+    const variantId = variant.id;
 
     setIsAdding(true);
     try {

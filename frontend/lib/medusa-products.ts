@@ -155,5 +155,13 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
     region_id,
     fields: FIELDS,
   });
+  // TODO: log temporal para depurar productos no encontrados; quitar después
+  if (!products[0]) {
+    console.error("[getProductBySlug] producto no encontrado", {
+      slug,
+      region_id,
+      count: products.length,
+    });
+  }
   return products[0] ? mapProduct(products[0]) : null;
 }

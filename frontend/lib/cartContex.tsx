@@ -1,12 +1,21 @@
 // lib/cartContex.tsx
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from "react";
 import {
   getOrCreateCart,
   addLineItem,
   updateLineItemQuantity,
   removeLineItem,
+  syncWholesalePricing,
   type CartItem,
   type WholesaleInfo,
 } from "@/lib/cartProducts";
@@ -37,6 +46,8 @@ type CartContextValue = {
   hideToast: () => void;
 };
 
+type CartSnapshot = { items: CartItem[]; wholesale: WholesaleInfo };
+
 const CartContext = createContext<CartContextValue | null>(null);
 
 const DEFAULT_WHOLESALE: WholesaleInfo = {
@@ -55,6 +66,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [toast, setToast] = useState<CartToastState | null>(null);
 
+  // Copia síncrona de items: evita leer valores viejos al pulsar +/- rápido
+  const itemsRef = useRef<CartItem[]>([]);
+  // Cola: las operaciones del carrito se ejecutan una tras otra
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingRef = useRef(0);
+
+  const commitItems = useCallback((next: CartItem[]) => {
+    itemsRef.current = next;
+    setItems(next);
+  }, []);
+
   // Inicializar carrito
   useEffect(() => {
     let mounted = true;
@@ -62,7 +84,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       .then(({ cartId, items, wholesale }) => {
         if (!mounted) return;
         setCartId(cartId);
-        setItems(items);
+        commitItems(items);
         setWholesale(wholesale);
       })
       .catch((err) => {
@@ -75,7 +97,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [commitItems]);
 
   const openCart = useCallback(() => setIsOpen(true), []);
   const closeCart = useCallback(() => setIsOpen(false), []);
@@ -87,111 +109,125 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback((message: string, productName?: string) => {
     setToast({ visible: true, message, productName });
-    // Ocultar automáticamente a los 4 segundos
     setTimeout(() => {
       setToast((prev) => (prev ? { ...prev, visible: false } : null));
     }, 4000);
   }, []);
 
-  const totalPairs = items.reduce((sum, item) => sum + item.quantity, 0);
+  // Ejecuta las operaciones una por una, en el orden en que se pulsaron
+  const enqueue = useCallback((task: () => Promise<void>): Promise<void> => {
+    pendingRef.current += 1;
+    const run = queueRef.current
+      .then(task)
+      .catch((err) => console.error("Error en operación del carrito:", err))
+      .finally(() => {
+        pendingRef.current -= 1;
+      });
+    queueRef.current = run;
+    return run;
+  }, []);
 
-  // Agregar producto al carrito desde PDP
-  async function addItem(variantId: string, quantity: number = 1, productName?: string): Promise<boolean> {
+  // Solo la ÚLTIMA operación de la cola pinta el estado del servidor;
+  // las intermedias se ignoran porque ya hay algo más nuevo pendiente.
+  const applyServer = useCallback(
+    (res: CartSnapshot) => {
+      if (pendingRef.current > 1) return;
+      commitItems(res.items);
+      setWholesale(res.wholesale);
+    },
+    [commitItems]
+  );
+
+  const resync = useCallback(
+    async (id: string) => {
+      try {
+        applyServer(await syncWholesalePricing(id));
+      } catch (err) {
+        console.error("No se pudo resincronizar el carrito:", err);
+      }
+    },
+    [applyServer]
+  );
+
+  // Valores calculados localmente: barra y texto siempre coinciden
+  const totalPairs = items.reduce((sum, item) => sum + item.quantity, 0);
+  const threshold = wholesale.threshold;
+  const isWholesale = totalPairs >= threshold;
+  const pairsUntilWholesale = Math.max(0, threshold - totalPairs);
+  const wholesaleLabel = isWholesale
+    ? wholesale.label ?? `Precio de mayoreo (${threshold}+ pares)`
+    : null;
+
+  async function addItem(
+    variantId: string,
+    quantity: number = 1,
+    productName?: string
+  ): Promise<boolean> {
     if (!cartId) {
       console.warn("No hay carrito disponible aún");
       return false;
     }
 
-    try {
-      const res = await addLineItem(cartId, variantId, quantity);
-      setItems(res.items);
-      setWholesale(res.wholesale);
-
-      showToast(
-        productName
-          ? `¡${productName} agregado al carrito!`
-          : "¡Producto agregado al carrito!",
-        productName
-      );
-      return true;
-    } catch (err) {
-      console.error("Error al agregar producto al carrito:", err);
-      showToast("Error al agregar el producto. Intenta nuevamente.");
-      return false;
-    }
+    let ok = false;
+    await enqueue(async () => {
+      try {
+        applyServer(await addLineItem(cartId, variantId, quantity));
+        ok = true;
+        showToast(
+          productName
+            ? `¡${productName} agregado al carrito!`
+            : "¡Producto agregado al carrito!",
+          productName
+        );
+      } catch (err) {
+        console.error("Error al agregar producto al carrito:", err);
+        showToast("Error al agregar el producto. Intenta nuevamente.");
+        await resync(cartId);
+      }
+    });
+    return ok;
   }
 
-  // Incrementar cantidad
+  function setQuantity(id: string, quantity: number): Promise<void> {
+    if (!cartId) return Promise.resolve();
+    // Optimista, partiendo SIEMPRE del valor más reciente
+    commitItems(
+      itemsRef.current.map((it) => (it.id === id ? { ...it, quantity } : it))
+    );
+    return enqueue(async () => {
+      try {
+        applyServer(await updateLineItemQuantity(cartId, id, quantity));
+      } catch (err) {
+        console.error("Error al actualizar cantidad:", err);
+        await resync(cartId);
+      }
+    });
+  }
+
   async function increase(id: string) {
-    if (!cartId) return;
-    const target = items.find((item) => item.id === id);
-    if (!target) return;
-
-    const previousItems = items;
-    const previousWholesale = wholesale;
-
-    // Actualización optimista
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, quantity: item.quantity + 1 } : item))
-    );
-
-    try {
-      const res = await updateLineItemQuantity(cartId, id, target.quantity + 1);
-      setItems(res.items);
-      setWholesale(res.wholesale);
-    } catch (err) {
-      console.error("Error al incrementar cantidad:", err);
-      setItems(previousItems);
-      setWholesale(previousWholesale);
-    }
+    const current = itemsRef.current.find((it) => it.id === id);
+    if (!current) return;
+    await setQuantity(id, current.quantity + 1);
   }
 
-  // Decrementar cantidad
   async function decrease(id: string) {
-    if (!cartId) return;
-    const target = items.find((item) => item.id === id);
-    if (!target) return;
-
-    if (target.quantity <= 1) {
-      return remove(id);
-    }
-
-    const previousItems = items;
-    const previousWholesale = wholesale;
-    const newQuantity = target.quantity - 1;
-
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, quantity: newQuantity } : item))
-    );
-
-    try {
-      const res = await updateLineItemQuantity(cartId, id, newQuantity);
-      setItems(res.items);
-      setWholesale(res.wholesale);
-    } catch (err) {
-      console.error("Error al decrementar cantidad:", err);
-      setItems(previousItems);
-      setWholesale(previousWholesale);
-    }
+    const current = itemsRef.current.find((it) => it.id === id);
+    if (!current) return;
+    if (current.quantity <= 1) return remove(id);
+    await setQuantity(id, current.quantity - 1);
   }
 
-  // Eliminar producto
   async function remove(id: string) {
     if (!cartId) return;
-    const previousItems = items;
-    const previousWholesale = wholesale;
-
-    setItems((prev) => prev.filter((item) => item.id !== id));
-
-    try {
-      const res = await removeLineItem(cartId, id);
-      setItems(res.items);
-      setWholesale(res.wholesale);
-    } catch (err) {
-      console.error("Error al eliminar item del carrito:", err);
-      setItems(previousItems);
-      setWholesale(previousWholesale);
-    }
+    commitItems(itemsRef.current.filter((it) => it.id !== id));
+    await enqueue(async () => {
+      try {
+        applyServer(await removeLineItem(cartId, id));
+      } catch (err) {
+        console.error("Error al eliminar item del carrito:", err);
+        await resync(cartId);
+      }
+    });
   }
 
   return (
@@ -201,9 +237,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         cartId,
         isLoading,
         totalPairs,
-        isWholesale: wholesale.applied,
-        pairsUntilWholesale: wholesale.pairsRemaining,
-        wholesaleLabel: wholesale.label,
+        isWholesale,
+        pairsUntilWholesale,
+        wholesaleLabel,
         isOpen,
         openCart,
         closeCart,

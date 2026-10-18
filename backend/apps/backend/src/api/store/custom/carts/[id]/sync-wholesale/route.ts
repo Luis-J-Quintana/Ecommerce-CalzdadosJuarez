@@ -30,6 +30,7 @@ export async function POST(
         "items.variant.metadata",
         "items.variant.product.metadata",
         "items.variant.price_set.prices.*",
+        "items.variant.price_set.prices.price_rules.*",
       ],
       filters: { id },
     });
@@ -83,10 +84,14 @@ export async function POST(
         targetPrice = Number(minPrice.amount);
       }
     } else {
-      // 1. Buscar precio de menudeo en prices con min_quantity = null o 1
-      const retailFromPrices =
-        prices.find((p: any) => p.min_quantity == null || Number(p.min_quantity) <= 1) ??
-        prices[0];
+      // 1. Precio de menudeo: el MXN sin min_quantity y sin reglas. Nunca uno con
+      // min_quantity (sería el de mayoreo) ni con reglas (p. ej. de región).
+      const retailFromPrices = prices.find(
+        (p: any) =>
+          p.min_quantity == null &&
+          !(p.price_rules?.length > 0) &&
+          !(Number(p.rules_count) > 0)
+      );
 
       if (retailFromPrices) {
         targetPrice = Number(retailFromPrices.amount);

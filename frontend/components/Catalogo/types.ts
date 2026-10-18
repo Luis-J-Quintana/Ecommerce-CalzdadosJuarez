@@ -32,8 +32,7 @@ export interface Product {
   descripcion?: string;
   material?: string; 
   wholesaleTiers?: Array<{ quantity: number; price?: number; pricePerUnit?: number }>;
-  variants?: Array<{ id: string; title: string; [key: string]: any }>;
-
+  variants?: Array<{ id: string; talla: string; precio: number; inStock: boolean }>;
   categoria: string; /* Categoría a la que pertenece el producto - Debe ser igual a lo que hay en lib/categories */
   categorias?: string[];
   categoriasInfo?: { handle: string; name: string }[];
