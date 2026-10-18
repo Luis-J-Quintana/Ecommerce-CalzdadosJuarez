@@ -1,6 +1,6 @@
 # Precio de mayoreo de punta a punta
 
-Última actualización: 17 de octubre de 2026
+Última actualización: 18 de octubre de 2026
 
 | Sección | Contenido |
 |---|---|
@@ -9,7 +9,7 @@
 | [3. Constantes compartidas](#3-constantes-compartidas) | Dónde vive el 15 |
 | [4. Flujo del carrito](#4-flujo-del-carrito) | Clic → estado local → endpoint → workflow |
 | [5. Por qué is_custom_price](#5-por-qué-is_custom_price) | Decisión de diseño |
-| [6. Widget de admin](#6-widget-de-admin) | Editar el mayoreo por variante |
+| [6. Widget de admin](#6-widget-de-admin) | Editar precio normal y de mayoreo, por variante o a todas |
 | [7. Script seed-mayoreo.ts](#7-script-seed-mayoreots) | Carga masiva |
 | [8. ADVERTENCIAS](#8-advertencias) | Lo que no hay que hacer |
 
@@ -33,7 +33,7 @@ Cada variante tiene un *price set* con varios precios. El proyecto distingue:
 
 | Precio | Moneda | Reglas | `min_quantity` | Quién lo gestiona |
 |---|---|---|---|---|
-| **Normal** | MXN | ninguna | `null` | Admin nativo, widget (solo lectura), script |
+| **Normal** | MXN | ninguna | `null` | Widget de admin o script (el admin nativo también, pero ver §8) |
 | **Mayoreo** | MXN | ninguna | `15` (`WHOLESALE_MIN_QUANTITY`) | Widget de admin o script |
 | Con reglas (p. ej. `region_id`) | cualquiera | sí | cualquiera | Admin nativo; **nunca** los tocan el widget ni el script |
 | De listas de precios | cualquiera | — | — | Admin nativo; no se tocan |
@@ -158,14 +158,56 @@ cambia la región, pero conviene tenerlo en cuenta.
 Archivo: `backend/apps/backend/src/admin/widgets/wholesale-prices.tsx`, zona
 `product.details.after` (al final del detalle de producto).
 
-- Por cada variante muestra el precio normal y un input
-  "Precio de mayoreo (15+ pares)" con un botón **Guardar**.
-- Lee con `GET /admin/variants/:id/wholesale-price` y guarda con
-  `POST /admin/variants/:id/wholesale-price`; la respuesta del POST actualiza la
-  pantalla sin recargar.
-- Campo vacío + Guardar elimina el mayoreo de esa variante.
-- Si la variante tiene varios precios normales, muestra un aviso y el POST
-  responde 400.
+Rutas que usa (detalle en [api-endpoints.md](./api-endpoints.md#3-admin)):
+`GET`/`POST /admin/products/:id/wholesale-prices` y
+`POST /admin/variants/:id/wholesale-price`.
+
+**Por variante**
+
+- Cada fila tiene dos inputs, **Precio normal** y
+  **Precio de mayoreo (15+ pares)** (el 15 lo manda la API), y un botón
+  **Guardar** que envía ambos a `POST /admin/variants/:id/wholesale-price`.
+- Mayoreo vacío + Guardar elimina solo el mayoreo. El precio normal no se puede
+  vaciar si ya existe.
+- El botón se habilita solo si algún campo cambió.
+- Los errores al guardar (validación o respuesta 400 del backend) se muestran
+  solo en un toast, no como texto bajo la fila.
+
+**Aplicar a todas las variantes**
+
+- Encima de la lista hay dos controles (input + botón): "Aplicar el mismo precio
+  normal a todas las variantes" y "Aplicar el mismo precio de mayoreo a todas
+  las variantes".
+- Antes de enviar, abre el diálogo de confirmación del admin (`usePrompt` de
+  `@medusajs/ui`) con el título "Aplicar precio a todas las variantes". La
+  descripción indica el tipo de precio (normal o de mayoreo), el monto, cuántas
+  variantes cambiarán de cuántas hay (las que no están bloqueadas y tienen otro
+  valor) y cuántas se omitirán por duplicados. Botones **Aplicar** y
+  **Cancelar**; si se cancela, no se envía nada.
+- Envía una sola petición a `POST /admin/products/:id/wholesale-prices`.
+- Si alguna variante queda en conflicto (p. ej. un normal nuevo menor o igual
+  que su mayoreo actual), el backend **no aplica nada** y el widget muestra la
+  lista de variantes con su motivo **solo** en un toast de error.
+
+**Después de guardar**
+
+- La pantalla se actualiza con la respuesta, sin recargar.
+- Un toast indica cuántas variantes se actualizaron (o "Sin cambios").
+- Las variantes **bloqueadas** (varios precios normales o varios de mayoreo) no
+  se modifican ni se borra nada: aparecen en un toast de aviso con el motivo, y
+  la fila muestra un aviso rojo permanente, porque indica un problema de datos
+  (además de este aviso, solo sale texto rojo si falla la carga inicial de las
+  variantes). Hay que dejar un solo precio de cada tipo a mano.
+- Los avisos del plan (p. ej. precios MXN sin reglas con otros mínimos que se
+  conservan) también se muestran en un toast.
+
+**Diferencia con el script**: el widget y sus rutas usan
+`planVariantPrices(..., { strictDuplicates: true })`, que bloquea las variantes
+con mayoreo duplicado. El script no pasa esa opción y conserva su
+comportamiento: deja un solo mayoreo y elimina los sobrantes.
+
+No verificado: no se probó en el navegador (no se ejecutó build ni el admin);
+`tsc --noEmit` del backend y de `src/admin` pasa sin errores.
 
 ## 7. Script seed-mayoreo.ts
 
@@ -218,6 +260,7 @@ de prueba es el argumento `dry-run` sin guiones (o `DRY_RUN=1`).
 - Si ya se editó con el admin nativo, corre el script en `dry-run` para ver el
   estado de cada precio antes de corregir.
 - Una variante con dos precios MXN sin reglas y sin mínimo hace que el widget y
-  el script se nieguen a guardar: hay que dejar uno a mano.
+  el script se nieguen a guardar: hay que dejar uno a mano. Con dos precios de
+  mayoreo, el widget también se niega (el script, en cambio, los fusiona).
 - No cambies `WHOLESALE_MIN_QUANTITY` sin revisar los precios ya cargados: los
   existentes conservan su `min_quantity` anterior.

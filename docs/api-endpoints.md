@@ -1,12 +1,12 @@
 # Referencia de endpoints propios
 
-Última actualización: 17 de octubre de 2026
+Última actualización: 18 de octubre de 2026
 
 | Sección | Contenido |
 |---|---|
 | [1. Convenciones](#1-convenciones) | Autenticación, errores y placeholders |
 | [2. Store](#2-store) | `sync`, `sync-wholesale`, `wholesale-summary`, `custom` |
-| [3. Admin](#3-admin) | `wholesale-price`, `custom` |
+| [3. Admin](#3-admin) | `wholesale-price` (variante), `wholesale-prices` (producto), `custom` |
 | [4. Pendientes y no verificado](#4-pendientes-y-no-verificado) | Lo que falta revisar |
 
 Todas las rutas viven en `backend/apps/backend/src/api/`. Este documento solo
@@ -33,7 +33,7 @@ cubre las rutas propias del proyecto; las rutas nativas de Medusa (por ejemplo
 `{ "type": "...", "message": "..." }`.
 
 **Placeholders**: `<BACKEND_URL>` (p. ej. `http://localhost:9000`),
-`<PUBLISHABLE_KEY>`, `<CART_ID>`, `<VARIANT_ID>`, `<ADMIN_TOKEN>`.
+`<PUBLISHABLE_KEY>`, `<CART_ID>`, `<PRODUCT_ID>`, `<VARIANT_ID>`, `<SKU>`, `<ADMIN_TOKEN>`.
 
 **Montos**: en unidades de la moneda (80 = $80.00 MXN), igual que Medusa v2.
 
@@ -217,12 +217,57 @@ Medusa: responde `200` sin cuerpo. No tiene uso en el proyecto.
 
 ## 3. Admin
 
+Las rutas de esta sección usan la lógica de
+`src/lib/wholesale-pricing.ts` (`parsePriceTarget`, `planVariantPrices` con
+`strictDuplicates: true`, `applyVariantPricePlans`, `serializeVariantPrices`).
+
+**Objeto de precios de una variante** (lo devuelven todas las rutas de esta
+sección):
+
+```json
+{
+  "variant_id": "<VARIANT_ID>",
+  "title": "25",
+  "sku": "<SKU>",
+  "currency_code": "mxn",
+  "min_quantity": 15,
+  "retail_amount": 80,
+  "retail_count": 1,
+  "wholesale_amount": 60,
+  "wholesale_count": 1
+}
+```
+
+- `retail_amount`: precio MXN sin reglas y sin `min_quantity`. Es `null` si no
+  hay ninguno **o si hay más de uno** (`retail_count` > 1).
+- `wholesale_amount`: precio MXN sin reglas con `min_quantity` = 15, o `null`.
+  Si hay varios (`wholesale_count` > 1), es el primero.
+
+**Variante bloqueada**: `retail_count` > 1 o `wholesale_count` > 1. Estas rutas
+no la modifican ni borran nada; hay que dejar un solo precio de cada tipo a mano.
+(El script `seed-mayoreo.ts`, en cambio, sí elimina los mayoreos duplicados).
+
+**Body de los POST**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `retail_amount` | `number` (opcional) | Precio normal, mayor que 0. Si se omite, se conserva el actual |
+| `wholesale_amount` | `number \| null` (opcional) | Mayoreo, mayor que 0 y menor que el normal **resultante**. `null` elimina solo el mayoreo. Si se omite, se conserva el actual, pero se vuelve a validar contra el normal nuevo |
+
+Hay que enviar al menos uno de los dos.
+
+**Efectos secundarios de los POST**: ejecutan `updateProductVariantsWorkflow`,
+que reemplaza la lista de precios de cada variante. Se reenvían por `id` (sin
+`rules`) todos los precios que se conservan, así que los precios con reglas de
+región, los de otras monedas y los MXN con otros mínimos quedan intactos. Los
+precios de listas de precios no se tocan. Las variantes que ya tienen los
+valores pedidos no se envían.
+
 ### 3.1 `GET /admin/variants/:id/wholesale-price`
 
 Archivo: `src/api/admin/variants/[id]/wholesale-price/route.ts`
 
-**Para qué sirve**: leer el precio normal y el de mayoreo de una variante. Lo
-usa el widget del admin.
+**Para qué sirve**: leer el precio normal y el de mayoreo de una variante.
 
 **Autenticación**: sesión de administrador.
 
@@ -231,20 +276,7 @@ curl "<BACKEND_URL>/admin/variants/<VARIANT_ID>/wholesale-price" \
   -H "Authorization: Bearer <ADMIN_TOKEN>"
 ```
 
-```json
-{
-  "variant_id": "<VARIANT_ID>",
-  "currency_code": "mxn",
-  "min_quantity": 15,
-  "retail_amount": 80,
-  "retail_count": 1,
-  "wholesale_amount": 60
-}
-```
-
-- `retail_amount`: precio MXN sin reglas y sin `min_quantity`. Es `null` si no
-  hay ninguno **o si hay más de uno** (`retail_count` > 1).
-- `wholesale_amount`: precio MXN sin reglas con `min_quantity` = 15, o `null`.
+**Respuesta (200)**: el objeto de precios de la variante.
 
 **Errores**: 404 `Variante <id> no encontrada`.
 
@@ -252,35 +284,38 @@ curl "<BACKEND_URL>/admin/variants/<VARIANT_ID>/wholesale-price" \
 
 ### 3.2 `POST /admin/variants/:id/wholesale-price`
 
-**Para qué sirve**: crear, actualizar o eliminar **solo** el precio de mayoreo
-de la variante.
+**Para qué sirve**: guardar el precio normal y/o el de mayoreo de **una**
+variante. Lo usa el botón **Guardar** de cada fila del widget.
 
 **Autenticación**: sesión de administrador.
 
-**Body**
-
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `amount` | `number \| null` | Mayor que 0 y menor que el precio normal. `null` elimina el mayoreo |
+**Body**: `{ retail_amount?, wholesale_amount? }` (ver arriba). Por
+compatibilidad acepta también `amount` como alias de `wholesale_amount` (se
+usa solo si `wholesale_amount` no viene).
 
 ```bash
 curl -X POST "<BACKEND_URL>/admin/variants/<VARIANT_ID>/wholesale-price" \
   -H "Authorization: Bearer <ADMIN_TOKEN>" \
   -H "Content-Type: application/json" \
-  -d '{ "amount": 60 }'
+  -d '{ "retail_amount": 85, "wholesale_amount": 62 }'
 ```
 
-**Respuesta (200)**: la misma forma que el GET, con el valor ya guardado, más
-`warnings` (texto, p. ej. mayoreos duplicados eliminados):
+**Respuesta (200)**: el objeto de precios ya guardado, más `updated` (`false`
+si ya tenía esos valores) y `warnings` (texto; p. ej. precios MXN sin reglas
+con otros mínimos que se conservan):
 
 ```json
 {
   "variant_id": "<VARIANT_ID>",
+  "title": "25",
+  "sku": "<SKU>",
   "currency_code": "mxn",
   "min_quantity": 15,
-  "retail_amount": 80,
+  "retail_amount": 85,
   "retail_count": 1,
-  "wholesale_amount": 60,
+  "wholesale_amount": 62,
+  "wholesale_count": 1,
+  "updated": true,
   "warnings": []
 }
 ```
@@ -289,22 +324,100 @@ curl -X POST "<BACKEND_URL>/admin/variants/<VARIANT_ID>/wholesale-price" \
 
 | Código | Mensaje |
 |---|---|
-| 400 | `Falta amount (número > 0 o null para eliminar)` |
-| 400 | `amount debe ser un número mayor que 0 o null` |
-| 400 | `No se puede guardar: el mayoreo (<x>) debe ser menor que el normal (<y>)` |
-| 400 | `No se puede guardar: no hay precio normal MXN sin reglas con el cual comparar el mayoreo` |
-| 400 | `No se puede guardar: tiene N precios MXN sin reglas y sin min_quantity (...); resuélvelo a mano` |
-| 400 | `No se puede guardar: sin price_set` |
+| 400 | `Envía retail_amount (número > 0) y/o wholesale_amount (número > 0, o null para eliminar el mayoreo)` |
+| 400 | `retail_amount debe ser un número mayor que 0` |
+| 400 | `wholesale_amount debe ser un número mayor que 0 o null` |
+| 400 | `No se puede guardar: el mayoreo (<x>) debe ser menor que el normal (<y>)` (`code: "conflict"`) |
+| 400 | `No se puede guardar: no hay precio normal MXN sin reglas con el cual comparar el mayoreo` (`code: "conflict"`) |
+| 400 | `No se puede guardar: tiene N precios MXN sin reglas y sin min_quantity (...); resuélvelo a mano` (`code: "blocked"`) |
+| 400 | `No se puede guardar: tiene N precios de mayoreo (min 15) (...); resuélvelo a mano` (`code: "blocked"`) |
+| 400 | `No se puede guardar: sin price_set` (`code: "blocked"`) |
 | 404 | `Variante <id> no encontrada` |
 
-**Efectos secundarios**: ejecuta `updateProductVariantsWorkflow`, que
-reemplaza la lista de precios de la variante. Se reenvían por `id` (sin
-`rules`) todos los precios que se conservan, así que el precio normal, los
-precios con reglas de región y los de otras monedas quedan intactos. Los
-precios de listas de precios no se tocan. Si el valor ya es el pedido, no
-ejecuta nada.
+### 3.3 `GET /admin/products/:id/wholesale-prices`
 
-### 3.3 `GET /admin/custom`
+Archivo: `src/api/admin/products/[id]/wholesale-prices/route.ts`
+
+**Para qué sirve**: leer los precios de todas las variantes del producto en una
+sola petición. El widget la usa al cargar.
+
+**Autenticación**: sesión de administrador.
+
+```bash
+curl "<BACKEND_URL>/admin/products/<PRODUCT_ID>/wholesale-prices" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>"
+```
+
+**Respuesta (200)**: `{ "variants": [ <objeto de precios>, ... ] }`.
+
+**Errores**: 404 `Producto <id> no encontrado`.
+
+**Efectos secundarios**: ninguno.
+
+### 3.4 `POST /admin/products/:id/wholesale-prices`
+
+**Para qué sirve**: aplicar el mismo precio normal y/o de mayoreo a **todas**
+las variantes del producto en una sola petición. La usan los botones
+"Aplicar ... a todas las variantes" del widget.
+
+**Autenticación**: sesión de administrador.
+
+**Body**: `{ retail_amount?, wholesale_amount? }` (ver arriba; aquí no se
+acepta `amount`).
+
+```bash
+curl -X POST "<BACKEND_URL>/admin/products/<PRODUCT_ID>/wholesale-prices" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{ "retail_amount": 90 }'
+```
+
+**Todo o nada ante conflictos**: se planea cada variante antes de aplicar. Si
+**alguna** queda en conflicto (mayoreo mayor o igual que el normal resultante,
+o mayoreo sin precio normal con el cual compararlo), responde 400 y **no aplica
+nada**:
+
+```json
+{
+  "message": "No se aplicó ningún cambio: 1 variante(s) en conflicto. 26: el mayoreo (60) debe ser menor que el normal (55)",
+  "conflicts": [
+    { "variant_id": "<VARIANT_ID>", "title": "26", "reason": "el mayoreo (60) debe ser menor que el normal (55)" }
+  ]
+}
+```
+
+Las variantes **bloqueadas** no cuentan como conflicto: se omiten sin tocarlas y
+el resto sí se actualiza.
+
+**Respuesta (200)**
+
+```json
+{
+  "updated": 5,
+  "unchanged": 1,
+  "skipped": [
+    { "variant_id": "<VARIANT_ID>", "title": "27", "reason": "tiene 2 precios MXN sin reglas y sin min_quantity (...); resuélvelo a mano" }
+  ],
+  "warnings": [
+    { "variant_id": "<VARIANT_ID>", "title": "25", "messages": ["se conservan 1 precio(s) MXN sin reglas con otros mínimos/máximos: ..."] }
+  ],
+  "variants": [ "<objeto de precios de cada variante, ya actualizado>" ]
+}
+```
+
+**Errores**
+
+| Código | Mensaje |
+|---|---|
+| 400 | Los mismos de validación del body que en 3.2 |
+| 400 | `No se aplicó ningún cambio: N variante(s) en conflicto. ...`, con `conflicts` |
+| 404 | `Producto <id> no encontrado` |
+
+**Efectos secundarios**: una sola ejecución de `updateProductVariantsWorkflow`
+con todas las variantes que cambian. Que esa ejecución revierta todo si falla a
+mitad depende de la compensación del workflow nativo: **no verificado**.
+
+### 3.5 `GET /admin/custom`
 
 Archivo: `src/api/admin/custom/route.ts`. Ruta de ejemplo de la plantilla:
 responde `200` sin cuerpo.

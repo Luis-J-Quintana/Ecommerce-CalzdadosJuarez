@@ -66,13 +66,39 @@ type PriceInput = {
 export type PriceTarget = {
   /** Monto del precio normal; undefined = no tocar el normal existente. */
   retailAmount?: number;
-  /** Monto del mayoreo; null = eliminar solo el precio de mayoreo. */
-  wholesaleAmount: number | null;
+  /**
+   * Monto del mayoreo; null = eliminar solo el precio de mayoreo;
+   * undefined = conservar el mayoreo actual (y validarlo contra el normal nuevo).
+   */
+  wholesaleAmount?: number | null;
 };
+
+export type PlanOptions = {
+  /**
+   * Si es true, una variante con varios precios de mayoreo se omite como
+   * "blocked" en lugar de fusionarlos (eliminar los sobrantes). Lo usan las
+   * rutas de admin; el script seed-mayoreo.ts no lo pasa.
+   */
+  strictDuplicates?: boolean;
+};
+
+/**
+ * Motivo de una variante omitida:
+ * - "conflict": el monto pedido no es válido para esa variante (p. ej. mayoreo >= normal).
+ * - "blocked": la variante no se puede actualizar sin intervención manual
+ *   (precios duplicados, sin price_set).
+ */
+export type SkipCode = "conflict" | "blocked";
 
 export type VariantPricePlan =
   | { status: "unchanged"; variantId: string; warnings: string[] }
-  | { status: "skip"; variantId: string; reason: string; warnings: string[] }
+  | {
+      status: "skip";
+      variantId: string;
+      code: SkipCode;
+      reason: string;
+      warnings: string[];
+    }
   | {
       status: "update";
       variantId: string;
@@ -124,7 +150,66 @@ export function readWholesale(variant: VariantWithPrices) {
     retail: retail.length === 1 ? Number(retail[0].amount) : null,
     retailCount: retail.length,
     wholesale: wholesale[0] ? Number(wholesale[0].amount) : null,
+    wholesaleCount: wholesale.length,
     wholesaleId: wholesale[0]?.id ?? null,
+  };
+}
+
+/** Forma común de las respuestas de las rutas de admin de mayoreo. */
+export function serializeVariantPrices(variant: VariantWithPrices) {
+  const { retail, retailCount, wholesale, wholesaleCount } = readWholesale(variant);
+  return {
+    variant_id: variant.id,
+    title: variant.title ?? null,
+    sku: variant.sku ?? null,
+    currency_code: WHOLESALE_CURRENCY,
+    min_quantity: WHOLESALE_MIN_QUANTITY,
+    retail_amount: retail,
+    retail_count: retailCount,
+    wholesale_amount: wholesale,
+    wholesale_count: wholesaleCount,
+  };
+}
+
+export type AmountsBody = {
+  retail_amount?: unknown;
+  wholesale_amount?: unknown;
+  /** Alias anterior de wholesale_amount (ruta por variante). */
+  amount?: unknown;
+};
+
+const isPositiveNumber = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v) && v > 0;
+
+/**
+ * Valida { retail_amount?, wholesale_amount? } y lo convierte en PriceTarget.
+ * Devuelve { error } con un mensaje para responder 400.
+ */
+export function parsePriceTarget(
+  body: AmountsBody | undefined,
+  { allowLegacyAmount = false } = {}
+): { target: PriceTarget } | { error: string } {
+  const retail = body?.retail_amount;
+  let wholesale = body?.wholesale_amount;
+  if (wholesale === undefined && allowLegacyAmount) wholesale = body?.amount;
+
+  if (retail === undefined && wholesale === undefined) {
+    return {
+      error:
+        "Envía retail_amount (número > 0) y/o wholesale_amount (número > 0, o null para eliminar el mayoreo)",
+    };
+  }
+  if (retail !== undefined && !isPositiveNumber(retail)) {
+    return { error: "retail_amount debe ser un número mayor que 0" };
+  }
+  if (wholesale !== undefined && wholesale !== null && !isPositiveNumber(wholesale)) {
+    return { error: "wholesale_amount debe ser un número mayor que 0 o null" };
+  }
+  return {
+    target: {
+      ...(retail !== undefined && { retailAmount: retail }),
+      ...(wholesale !== undefined && { wholesaleAmount: wholesale as number | null }),
+    },
   };
 }
 
@@ -143,13 +228,21 @@ const keep = (p: PriceRow): PriceInput => ({
  */
 export function planVariantPrices(
   variant: VariantWithPrices,
-  target: PriceTarget
+  target: PriceTarget,
+  options: PlanOptions = {}
 ): VariantPricePlan {
   const variantId = variant.id;
   const warnings: string[] = [];
+  const skip = (code: SkipCode, reason: string): VariantPricePlan => ({
+    status: "skip",
+    variantId,
+    code,
+    reason,
+    warnings,
+  });
 
   if (!variant.price_set) {
-    return { status: "skip", variantId, reason: "sin price_set", warnings };
+    return skip("blocked", "sin price_set");
   }
 
   const prices = priceSetPrices(variant);
@@ -157,39 +250,45 @@ export function planVariantPrices(
   const wholesale = prices.filter(isWholesalePrice);
 
   if (retail.length > 1) {
-    return {
-      status: "skip",
-      variantId,
-      reason:
-        `tiene ${retail.length} precios MXN sin reglas y sin min_quantity ` +
-        `(${retail.map((p) => p.id).join(", ")}); resuélvelo a mano`,
-      warnings,
-    };
+    return skip(
+      "blocked",
+      `tiene ${retail.length} precios MXN sin reglas y sin min_quantity ` +
+        `(${retail.map((p) => p.id).join(", ")}); resuélvelo a mano`
+    );
+  }
+  if (options.strictDuplicates && wholesale.length > 1) {
+    return skip(
+      "blocked",
+      `tiene ${wholesale.length} precios de mayoreo (min ${WHOLESALE_MIN_QUANTITY}) ` +
+        `(${wholesale.map((p) => p.id).join(", ")}); resuélvelo a mano`
+    );
   }
 
   const currentRetail = retail[0] ? Number(retail[0].amount) : null;
+  const currentWholesale = wholesale[0] ? Number(wholesale[0].amount) : null;
+  if (target.retailAmount !== undefined && !(target.retailAmount > 0)) {
+    return skip("conflict", "el precio normal debe ser > 0");
+  }
   const retailAmount = target.retailAmount ?? currentRetail;
-  const { wholesaleAmount } = target;
+  // undefined = conservar el mayoreo actual, validándolo contra el normal resultante.
+  const wholesaleAmount =
+    target.wholesaleAmount === undefined ? currentWholesale : target.wholesaleAmount;
 
   if (wholesaleAmount != null) {
     if (!(wholesaleAmount > 0)) {
-      return { status: "skip", variantId, reason: "el mayoreo debe ser > 0", warnings };
+      return skip("conflict", "el mayoreo debe ser > 0");
     }
     if (retailAmount == null) {
-      return {
-        status: "skip",
-        variantId,
-        reason: "no hay precio normal MXN sin reglas con el cual comparar el mayoreo",
-        warnings,
-      };
+      return skip(
+        "conflict",
+        "no hay precio normal MXN sin reglas con el cual comparar el mayoreo"
+      );
     }
     if (wholesaleAmount >= retailAmount) {
-      return {
-        status: "skip",
-        variantId,
-        reason: `el mayoreo (${wholesaleAmount}) debe ser menor que el normal (${retailAmount})`,
-        warnings,
-      };
+      return skip(
+        "conflict",
+        `el mayoreo (${wholesaleAmount}) debe ser menor que el normal (${retailAmount})`
+      );
     }
   }
 
@@ -232,7 +331,6 @@ export function planVariantPrices(
     if (!retailOk) changes.push(`normal: ${currentRetail ?? "ninguno"} -> ${retailAmount}`);
   }
 
-  const currentWholesale = wholesale[0] ? Number(wholesale[0].amount) : null;
   if (wholesaleAmount != null) {
     next.push({
       ...(wholesale[0] && { id: wholesale[0].id }),

@@ -1,28 +1,12 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import {
-  WHOLESALE_CURRENCY,
-  WHOLESALE_MIN_QUANTITY,
   applyVariantPricePlans,
   fetchVariantsWithPrices,
+  parsePriceTarget,
   planVariantPrices,
-  readWholesale,
-  type VariantWithPrices,
+  serializeVariantPrices,
+  type AmountsBody,
 } from "../../../../../lib/wholesale-pricing";
-
-type WholesalePriceBody = { amount?: number | null };
-
-/** Respuesta común de GET y POST: precio normal y de mayoreo actuales. */
-function serialize(variant: VariantWithPrices) {
-  const { retail, retailCount, wholesale } = readWholesale(variant);
-  return {
-    variant_id: variant.id,
-    currency_code: WHOLESALE_CURRENCY,
-    min_quantity: WHOLESALE_MIN_QUANTITY,
-    retail_amount: retail,
-    retail_count: retailCount,
-    wholesale_amount: wholesale,
-  };
-}
 
 async function getVariant(req: MedusaRequest) {
   const [variant] = await fetchVariantsWithPrices(req.scope, { id: req.params.id });
@@ -40,25 +24,23 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
     res.status(404).json({ message: `Variante ${req.params.id} no encontrada` });
     return;
   }
-  res.json(serialize(variant));
+  res.json(serializeVariantPrices(variant));
 }
 
 /**
- * POST /admin/variants/:id/wholesale-price  { amount: number | null }
- * Crea o actualiza solo el precio de mayoreo; con amount null lo elimina.
- * El precio normal y los precios con reglas se conservan.
+ * POST /admin/variants/:id/wholesale-price
+ *   { retail_amount?: number, wholesale_amount?: number | null }
+ * Actualiza el precio normal y/o el de mayoreo; wholesale_amount null elimina
+ * solo el mayoreo. Acepta `amount` como alias anterior de wholesale_amount.
+ * Los precios con reglas, de otras monedas y de listas de precios se conservan.
  */
 export async function POST(
-  req: MedusaRequest<WholesalePriceBody>,
+  req: MedusaRequest<AmountsBody>,
   res: MedusaResponse
 ): Promise<void> {
-  const raw = req.body?.amount;
-  if (raw === undefined) {
-    res.status(400).json({ message: "Falta amount (número > 0 o null para eliminar)" });
-    return;
-  }
-  if (raw !== null && (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0)) {
-    res.status(400).json({ message: "amount debe ser un número mayor que 0 o null" });
+  const parsed = parsePriceTarget(req.body, { allowLegacyAmount: true });
+  if ("error" in parsed) {
+    res.status(400).json({ message: parsed.error });
     return;
   }
 
@@ -68,15 +50,21 @@ export async function POST(
     return;
   }
 
-  // Sin retailAmount: el precio normal no se toca, solo se compara contra él.
-  const plan = planVariantPrices(variant, { wholesaleAmount: raw });
+  const plan = planVariantPrices(variant, parsed.target, { strictDuplicates: true });
   if (plan.status === "skip") {
-    res.status(400).json({ message: `No se puede guardar: ${plan.reason}` });
+    res.status(400).json({
+      message: `No se puede guardar: ${plan.reason}`,
+      code: plan.code,
+    });
     return;
   }
 
   await applyVariantPricePlans(req.scope, [plan]);
 
   const updated = plan.status === "update" ? await getVariant(req) : variant;
-  res.json({ ...serialize(updated), warnings: plan.warnings });
+  res.json({
+    ...serializeVariantPrices(updated),
+    updated: plan.status === "update",
+    warnings: plan.warnings,
+  });
 }
