@@ -1,21 +1,24 @@
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { updateProductVariantsWorkflow } from "@medusajs/medusa/core-flows";
+import { DEFAULT_WHOLESALE_THRESHOLD } from "../modules/wholesale-settings/constants";
 
 /**
  * Lógica compartida del precio de mayoreo.
  *
  * Modelo: por variante, el mayoreo es un precio MXN sin reglas con
- * min_quantity = WHOLESALE_MIN_QUANTITY; el normal es el precio MXN sin reglas
- * y sin min_quantity. Los precios con reglas (región u otras) y los de listas
- * de precios nunca se modifican ni eliminan.
+ * min_quantity no nulo y mayor que 1 (al crearlo o sincronizarlo se usa el
+ * umbral global, ver src/lib/wholesale-settings.ts); el normal es el precio MXN
+ * sin reglas y sin min_quantity. Los precios con reglas (región u otras) y los
+ * de listas de precios nunca se modifican ni eliminan.
  *
  * updateProductVariantsWorkflow REEMPLAZA los precios del price set, así que el
  * plan reenvía todos los precios que se conservan, por id y sin `rules` (con eso
  * el módulo de precios deja sus reglas intactas).
  */
 
-export const WHOLESALE_MIN_QUANTITY = 15;
+/** Solo valor por defecto: el umbral real se lee con getWholesaleThreshold(container). */
+export const WHOLESALE_MIN_QUANTITY = DEFAULT_WHOLESALE_THRESHOLD;
 export const WHOLESALE_CURRENCY = "mxn";
 /** Cantidad máxima por línea que acepta PUT /store/custom/carts/:id/sync. */
 export const MAX_ITEM_QUANTITY = 9999;
@@ -80,6 +83,12 @@ export type PlanOptions = {
    * rutas de admin; el script seed-mayoreo.ts no lo pasa.
    */
   strictDuplicates?: boolean;
+  /**
+   * min_quantity con el que se crea o sincroniza el precio de mayoreo (umbral
+   * global). Un mayoreo con otro min_quantity cuenta como cambio.
+   * Por defecto WHOLESALE_MIN_QUANTITY.
+   */
+  threshold?: number;
 };
 
 /**
@@ -117,9 +126,11 @@ const isBase = (p: PriceRow) => isMxn(p) && !hasRules(p) && !isPriceListPrice(p)
 
 export const isRetailPrice = (p: PriceRow) =>
   isBase(p) && p.min_quantity == null && p.max_quantity == null;
+/** MXN sin reglas ni lista, con min_quantity no nulo y > 1 (y sin max_quantity). */
 export const isWholesalePrice = (p: PriceRow) =>
   isBase(p) &&
-  Number(p.min_quantity) === WHOLESALE_MIN_QUANTITY &&
+  p.min_quantity != null &&
+  Number(p.min_quantity) > 1 &&
   p.max_quantity == null;
 
 /** Precios del price set que el workflow reemplaza (excluye listas de precios). */
@@ -152,22 +163,29 @@ export function readWholesale(variant: VariantWithPrices) {
     wholesale: wholesale[0] ? Number(wholesale[0].amount) : null,
     wholesaleCount: wholesale.length,
     wholesaleId: wholesale[0]?.id ?? null,
+    wholesaleMinQuantity: wholesale[0] ? Number(wholesale[0].min_quantity) : null,
   };
 }
 
-/** Forma común de las respuestas de las rutas de admin de mayoreo. */
-export function serializeVariantPrices(variant: VariantWithPrices) {
-  const { retail, retailCount, wholesale, wholesaleCount } = readWholesale(variant);
+/**
+ * Forma común de las respuestas de las rutas de admin de mayoreo.
+ * `min_quantity` es el umbral global; `wholesale_min_quantity`, el que tiene
+ * guardado el precio de mayoreo (difieren si quedó sin sincronizar).
+ */
+export function serializeVariantPrices(variant: VariantWithPrices, threshold: number) {
+  const { retail, retailCount, wholesale, wholesaleCount, wholesaleMinQuantity } =
+    readWholesale(variant);
   return {
     variant_id: variant.id,
     title: variant.title ?? null,
     sku: variant.sku ?? null,
     currency_code: WHOLESALE_CURRENCY,
-    min_quantity: WHOLESALE_MIN_QUANTITY,
+    min_quantity: threshold,
     retail_amount: retail,
     retail_count: retailCount,
     wholesale_amount: wholesale,
     wholesale_count: wholesaleCount,
+    wholesale_min_quantity: wholesaleMinQuantity,
   };
 }
 
@@ -232,6 +250,7 @@ export function planVariantPrices(
   options: PlanOptions = {}
 ): VariantPricePlan {
   const variantId = variant.id;
+  const threshold = options.threshold ?? WHOLESALE_MIN_QUANTITY;
   const warnings: string[] = [];
   const skip = (code: SkipCode, reason: string): VariantPricePlan => ({
     status: "skip",
@@ -259,7 +278,7 @@ export function planVariantPrices(
   if (options.strictDuplicates && wholesale.length > 1) {
     return skip(
       "blocked",
-      `tiene ${wholesale.length} precios de mayoreo (min ${WHOLESALE_MIN_QUANTITY}) ` +
+      `tiene ${wholesale.length} precios de mayoreo (MXN sin reglas con min_quantity > 1) ` +
         `(${wholesale.map((p) => p.id).join(", ")}); resuélvelo a mano`
     );
   }
@@ -312,7 +331,9 @@ export function planVariantPrices(
   const wholesaleOk =
     wholesaleAmount == null
       ? wholesale.length === 0
-      : wholesale.length === 1 && Number(wholesale[0].amount) === wholesaleAmount;
+      : wholesale.length === 1 &&
+        Number(wholesale[0].amount) === wholesaleAmount &&
+        Number(wholesale[0].min_quantity) === threshold;
   if (retailOk && wholesaleOk) {
     return { status: "unchanged", variantId, warnings };
   }
@@ -336,13 +357,14 @@ export function planVariantPrices(
       ...(wholesale[0] && { id: wholesale[0].id }),
       currency_code: WHOLESALE_CURRENCY,
       amount: wholesaleAmount,
-      min_quantity: WHOLESALE_MIN_QUANTITY,
+      min_quantity: threshold,
     });
   }
   if (!wholesaleOk) {
+    const currentMin = wholesale[0] ? ` (min ${wholesale[0].min_quantity})` : "";
     changes.push(
-      `mayoreo (min ${WHOLESALE_MIN_QUANTITY}): ${currentWholesale ?? "ninguno"} -> ` +
-        `${wholesaleAmount ?? "eliminado"}`
+      `mayoreo: ${currentWholesale ?? "ninguno"}${currentMin} -> ` +
+        (wholesaleAmount == null ? "eliminado" : `${wholesaleAmount} (min ${threshold})`)
     );
   }
 
@@ -363,14 +385,83 @@ export async function fetchVariantsWithPrices(
   return data as VariantWithPrices[];
 }
 
+export type VariantWithProduct = VariantWithPrices & {
+  product?: { id: string; title?: string | null } | null;
+};
+
+/** Todas las variantes con sus precios, leídas por lotes (orden por id). */
+export async function fetchAllVariantsWithPrices(
+  container: MedusaContainer,
+  batchSize = 200
+): Promise<VariantWithProduct[]> {
+  const query = container.resolve(ContainerRegistrationKeys.QUERY);
+  const all: VariantWithProduct[] = [];
+  for (let skip = 0; ; skip += batchSize) {
+    const { data } = await query.graph({
+      entity: "product_variant",
+      fields: [...VARIANT_PRICE_FIELDS, "product.id", "product.title"],
+      pagination: { skip, take: batchSize, order: { id: "ASC" } },
+    });
+    all.push(...(data as VariantWithProduct[]));
+    if (data.length < batchSize) return all;
+  }
+}
+
+/** Entrada de updateProductVariantsWorkflow para los planes con status "update". */
+export function toProductVariantUpdates(plans: VariantPricePlan[]) {
+  return plans.flatMap((p) =>
+    p.status === "update" ? [{ id: p.variantId, prices: p.prices }] : []
+  );
+}
+
+export type ThresholdSyncBlocked = {
+  variant_id: string;
+  variant_title: string | null;
+  product_id: string | null;
+  product_title: string | null;
+  reason: string;
+};
+
+/**
+ * Plan para llevar el min_quantity de TODOS los precios de mayoreo al umbral
+ * nuevo, sin cambiar montos. Solo considera variantes con al menos un precio de
+ * mayoreo. Las que no se pueden actualizar (mayoreos o normales duplicados,
+ * mayoreo sin normal o >= normal) no se tocan y vuelven en `blocked`.
+ */
+export function planWholesaleThresholdSync(
+  variants: VariantWithProduct[],
+  threshold: number
+) {
+  const plans: VariantPricePlan[] = [];
+  const blocked: ThresholdSyncBlocked[] = [];
+
+  for (const v of variants) {
+    if (!priceSetPrices(v).some(isWholesalePrice)) continue;
+    const plan = planVariantPrices(v, {}, { strictDuplicates: true, threshold });
+    if (plan.status === "skip") {
+      blocked.push({
+        variant_id: v.id,
+        variant_title: v.title ?? v.sku ?? null,
+        product_id: v.product?.id ?? null,
+        product_title: v.product?.title ?? null,
+        reason: plan.reason,
+      });
+    } else {
+      plans.push(plan);
+    }
+  }
+
+  const product_variants = toProductVariantUpdates(plans);
+  // Cada variante actualizada tiene exactamente un precio de mayoreo (strictDuplicates).
+  return { product_variants, updated_prices: product_variants.length, blocked };
+}
+
 /** Aplica en una sola ejecución del workflow los planes con status "update". */
 export async function applyVariantPricePlans(
   container: MedusaContainer,
   plans: VariantPricePlan[]
 ) {
-  const product_variants = plans.flatMap((p) =>
-    p.status === "update" ? [{ id: p.variantId, prices: p.prices }] : []
-  );
+  const product_variants = toProductVariantUpdates(plans);
   if (!product_variants.length) return;
   await updateProductVariantsWorkflow(container).run({
     input: { product_variants },

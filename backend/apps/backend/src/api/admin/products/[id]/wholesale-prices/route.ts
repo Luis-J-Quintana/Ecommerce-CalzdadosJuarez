@@ -9,6 +9,7 @@ import {
   type AmountsBody,
   type VariantWithPrices,
 } from "../../../../../lib/wholesale-pricing";
+import { getWholesaleThreshold } from "../../../../../lib/wholesale-settings";
 
 /** Variantes del producto con sus precios, o null si el producto no existe. */
 async function getProductVariants(req: MedusaRequest) {
@@ -37,7 +38,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
     notFound(req, res);
     return;
   }
-  res.json({ variants: variants.map(serializeVariantPrices) });
+  const threshold = await getWholesaleThreshold(req.scope);
+  res.json({ variants: variants.map((v) => serializeVariantPrices(v, threshold)) });
 }
 
 /**
@@ -67,9 +69,10 @@ export async function POST(
     return;
   }
 
+  const threshold = await getWholesaleThreshold(req.scope);
   const byId = new Map(variants.map((v) => [v.id, v]));
   const plans = variants.map((v) =>
-    planVariantPrices(v, parsed.target, { strictDuplicates: true })
+    planVariantPrices(v, parsed.target, { strictDuplicates: true, threshold })
   );
 
   const describeSkip = (code: "conflict" | "blocked") =>
@@ -104,6 +107,6 @@ export async function POST(
         ? [{ variant_id: p.variantId, title: label(byId.get(p.variantId)!), messages: p.warnings }]
         : []
     ),
-    variants: after.map(serializeVariantPrices),
+    variants: after.map((v) => serializeVariantPrices(v, threshold)),
   });
 }

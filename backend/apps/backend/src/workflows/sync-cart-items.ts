@@ -112,7 +112,8 @@ const syncCartItemsStep = createStep(
  * PUT /store/custom/carts/:id/sync
  * 1. Lock por carrito (clave propia: los workflows nativos ya usan cart_id como clave).
  * 2. Aplica la diferencia con el estado deseado.
- * 3. Aplica el mayoreo al final, para que ningún recálculo posterior lo pise.
+ * 3. Aplica el mayoreo al final (applyCartWholesaleStep, que lee el umbral global
+ *    con getWholesaleThreshold), para que ningún recálculo posterior lo pise.
  */
 export const syncCartItemsWorkflow = createWorkflow(
   "sync-cart-items",

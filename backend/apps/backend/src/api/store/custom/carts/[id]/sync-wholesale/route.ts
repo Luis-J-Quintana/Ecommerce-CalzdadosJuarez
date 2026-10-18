@@ -5,7 +5,8 @@ import { applyCartWholesaleWorkflow } from "../../../../../../workflows/apply-ca
 /**
  * POST /store/custom/carts/:id/sync-wholesale
  * Recalcula el unit_price de cada línea del carrito según el umbral global de
- * pares (WHOLESALE_THRESHOLD). La regla vive en src/lib/cart-wholesale.ts y se
+ * pares (getWholesaleThreshold, módulo wholesale-settings; lo lee el paso
+ * applyCartWholesaleStep). La regla vive en src/lib/cart-wholesale.ts y se
  * aplica con el mismo paso que usa PUT /store/custom/carts/:id/sync.
  */
 export async function POST(

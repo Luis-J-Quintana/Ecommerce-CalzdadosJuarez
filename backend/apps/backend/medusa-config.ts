@@ -16,6 +16,10 @@ module.exports = defineConfig({
   },
   modules: [
     {
+      // Ajustes globales de mayoreo (umbral de pares). Clave: "wholesaleSettings".
+      resolve: "./src/modules/wholesale-settings",
+    },
+    {
       resolve: "@medusajs/medusa/file",
       options: {
         providers: [

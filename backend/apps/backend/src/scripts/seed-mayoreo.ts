@@ -3,18 +3,18 @@ import path from "path";
 import type { MedusaContainer } from "@medusajs/framework";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import {
-  WHOLESALE_MIN_QUANTITY,
   applyVariantPricePlans,
   describePrice,
   fetchVariantsWithPrices,
   planVariantPrices,
   type VariantPricePlan,
 } from "../lib/wholesale-pricing";
+import { getWholesaleThreshold } from "../lib/wholesale-settings";
 
 /**
  * Deja en cada variante de los productos indicados, entre sus precios MXN sin
  * reglas, exactamente uno normal (sin min_quantity) y uno de mayoreo
- * (min_quantity = WHOLESALE_MIN_QUANTITY), que es lo que lee
+ * (min_quantity = umbral global del módulo wholesale-settings), que es lo que lee
  * POST /store/custom/carts/:id/sync-wholesale.
  *
  * - Nunca modifica ni elimina precios con reglas (region_id u otras) ni de listas de precios.
@@ -63,6 +63,7 @@ export async function seedMayoreo(
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER);
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const tag = dryRun ? "[dry-run] " : "";
+  const threshold = await getWholesaleThreshold(container);
 
   const errors = validate(items);
   if (errors.length) {
@@ -101,10 +102,14 @@ export async function seedMayoreo(
         prices.forEach((p) => logger.info(`${tag}    ${describePrice(p)}`));
       }
 
-      const plan = planVariantPrices(variant, {
-        retailAmount: Number(it.precioNormal),
-        wholesaleAmount: Number(it.precioMayoreo),
-      });
+      const plan = planVariantPrices(
+        variant,
+        {
+          retailAmount: Number(it.precioNormal),
+          wholesaleAmount: Number(it.precioMayoreo),
+        },
+        { threshold }
+      );
       plan.warnings.forEach((w) => logger.warn(`${tag}${label}: ${w}`));
 
       if (plan.status === "skip") {
@@ -113,7 +118,7 @@ export async function seedMayoreo(
       } else if (plan.status === "unchanged") {
         logger.info(
           `${tag}${label}: ya tiene ${it.precioNormal} / ${it.precioMayoreo} ` +
-            `(min ${WHOLESALE_MIN_QUANTITY}) MXN, sin cambios.`
+            `(min ${threshold}) MXN, sin cambios.`
         );
         summary.sinCambios++;
       } else {

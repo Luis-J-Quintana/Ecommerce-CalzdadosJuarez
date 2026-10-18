@@ -15,6 +15,7 @@ import {
   type LineUpdate,
   type WholesaleSummary,
 } from "../lib/cart-wholesale";
+import { getWholesaleThreshold } from "../lib/wholesale-settings";
 
 export type ApplyCartWholesaleResult = {
   wholesale: WholesaleSummary;
@@ -22,7 +23,8 @@ export type ApplyCartWholesaleResult = {
 };
 
 /**
- * Aplica la regla de mayoreo a todas las líneas del carrito.
+ * Aplica la regla de mayoreo a todas las líneas del carrito, con el umbral
+ * global guardado en el módulo wholesale-settings.
  * Debe ir al FINAL de cualquier cambio del carrito: los workflows de Medusa
  * recalculan el unit_price de las líneas que no tienen is_custom_price.
  */
@@ -42,7 +44,8 @@ export const applyCartWholesaleStep = createStep(
       throw new MedusaError(MedusaError.Types.NOT_FOUND, `Carrito ${cart_id} no encontrado`);
     }
 
-    const { wholesale, updates, lines } = planCartWholesale(cart);
+    const threshold = await getWholesaleThreshold(container);
+    const { wholesale, updates, lines } = planCartWholesale(cart, threshold);
 
     // Valores previos para revertir si un paso posterior falla.
     const previous: LineUpdate[] = updates.map((u) => {

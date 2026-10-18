@@ -7,6 +7,7 @@ import {
   serializeVariantPrices,
   type AmountsBody,
 } from "../../../../../lib/wholesale-pricing";
+import { getWholesaleThreshold } from "../../../../../lib/wholesale-settings";
 
 async function getVariant(req: MedusaRequest) {
   const [variant] = await fetchVariantsWithPrices(req.scope, { id: req.params.id });
@@ -16,7 +17,8 @@ async function getVariant(req: MedusaRequest) {
 /**
  * GET /admin/variants/:id/wholesale-price
  * Devuelve el precio normal (MXN sin reglas ni mínimo) y el de mayoreo
- * (MXN sin reglas con min_quantity = WHOLESALE_MIN_QUANTITY) de la variante.
+ * (MXN sin reglas con min_quantity > 1) de la variante; `min_quantity` en la
+ * respuesta es el umbral global.
  */
 export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void> {
   const variant = await getVariant(req);
@@ -24,7 +26,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
     res.status(404).json({ message: `Variante ${req.params.id} no encontrada` });
     return;
   }
-  res.json(serializeVariantPrices(variant));
+  res.json(serializeVariantPrices(variant, await getWholesaleThreshold(req.scope)));
 }
 
 /**
@@ -50,7 +52,8 @@ export async function POST(
     return;
   }
 
-  const plan = planVariantPrices(variant, parsed.target, { strictDuplicates: true });
+  const threshold = await getWholesaleThreshold(req.scope);
+  const plan = planVariantPrices(variant, parsed.target, { strictDuplicates: true, threshold });
   if (plan.status === "skip") {
     res.status(400).json({
       message: `No se puede guardar: ${plan.reason}`,
@@ -63,7 +66,7 @@ export async function POST(
 
   const updated = plan.status === "update" ? await getVariant(req) : variant;
   res.json({
-    ...serializeVariantPrices(updated),
+    ...serializeVariantPrices(updated, threshold),
     updated: plan.status === "update",
     warnings: plan.warnings,
   });

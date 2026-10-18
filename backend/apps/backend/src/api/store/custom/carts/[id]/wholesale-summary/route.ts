@@ -1,9 +1,10 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { Modules } from "@medusajs/framework/utils";
+import { summarizeWholesale } from "../../../../../../lib/cart-wholesale";
+import { getWholesaleThreshold } from "../../../../../../lib/wholesale-settings";
 
 // TODO: add new http methods for: POST the increment/decrement of a product in the cart, 
 // DELETE(maybe we should use a flag to "delete" the product instead to use the delete method)
-const WHOLESALE_THRESHOLD = 15;
 
 export async function GET(
   req: MedusaRequest,
@@ -16,18 +17,15 @@ export async function GET(
     relations: ["items"],
   });
 
-  const totalPairs = (cart.items ?? []).reduce(
-    (sum, item) => sum + Number(item.quantity || 0),
-    0
-  );
-
-  const isWholesale = totalPairs >= WHOLESALE_THRESHOLD;
+  // Umbral global (módulo wholesale-settings); la respuesta conserva su forma.
+  const threshold = await getWholesaleThreshold(req.scope);
+  const summary = summarizeWholesale(cart.items ?? [], threshold);
 
   res.json({
-    total_pairs: totalPairs,
-    wholesale_applied: isWholesale,
-    threshold: WHOLESALE_THRESHOLD,
-    pairs_remaining: Math.max(0, WHOLESALE_THRESHOLD - totalPairs),
-    wholesale_label: isWholesale ? "Precio de mayoreo (15+ pares)" : null,
+    total_pairs: summary.total_pairs,
+    wholesale_applied: summary.applied,
+    threshold: summary.threshold,
+    pairs_remaining: summary.pairs_remaining,
+    wholesale_label: summary.wholesale_label,
   });
 }

@@ -1,15 +1,13 @@
-import { WHOLESALE_MIN_QUANTITY, hasRules } from "./wholesale-pricing";
+import { hasRules } from "./wholesale-pricing";
 
 /**
  * Regla de mayoreo del carrito (lógica pura, sin IO).
  *
  * El umbral es global: se suman los pares de TODAS las líneas del carrito y,
- * si llegan a WHOLESALE_THRESHOLD, cada línea usa su precio de mayoreo.
+ * si llegan al umbral, cada línea usa su precio de mayoreo. El umbral lo lee
+ * quien llama con getWholesaleThreshold(container) (src/lib/wholesale-settings.ts).
  * La usan POST /store/custom/carts/:id/sync-wholesale y el workflow sync-cart-items.
  */
-
-// El umbral de pares coincide con el min_quantity del precio de mayoreo.
-export const WHOLESALE_THRESHOLD = WHOLESALE_MIN_QUANTITY;
 
 /** Campos de query.graph del carrito necesarios para resolver precios por línea. */
 export const CART_WHOLESALE_FIELDS = [
@@ -33,15 +31,18 @@ export type WholesaleSummary = {
   wholesale_label: string | null;
 };
 
-export function summarizeWholesale(items: { quantity?: unknown }[]): WholesaleSummary {
+export function summarizeWholesale(
+  items: { quantity?: unknown }[],
+  threshold: number
+): WholesaleSummary {
   const totalPairs = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-  const applied = totalPairs >= WHOLESALE_THRESHOLD;
+  const applied = totalPairs >= threshold;
   return {
     applied,
     total_pairs: totalPairs,
-    threshold: WHOLESALE_THRESHOLD,
-    pairs_remaining: Math.max(0, WHOLESALE_THRESHOLD - totalPairs),
-    wholesale_label: applied ? `Precio de mayoreo (${WHOLESALE_THRESHOLD}+ pares)` : null,
+    threshold,
+    pairs_remaining: Math.max(0, threshold - totalPairs),
+    wholesale_label: applied ? `Precio de mayoreo (${threshold}+ pares)` : null,
   };
 }
 
@@ -49,9 +50,9 @@ export function summarizeWholesale(items: { quantity?: unknown }[]): WholesaleSu
  * Precio normal y de mayoreo de una línea, en la moneda del carrito.
  * - Normal: precio sin min_quantity y sin reglas; si no hay, metadata.precio_menudeo
  *   de la variante o del producto. Nunca un precio con min_quantity.
- * - Mayoreo: precio con min_quantity >= WHOLESALE_MIN_QUANTITY (o > 1); si no hay,
- *   metadata.precio_mayoreo de la variante o del producto; si no, el menor de
- *   varios precios.
+ * - Mayoreo: precio sin reglas con min_quantity no nulo y > 1 (o, si no hay,
+ *   cualquier otro con min_quantity > 1); si no hay, metadata.precio_mayoreo de
+ *   la variante o del producto; si no, el menor de varios precios.
  */
 export function resolveLinePrices(
   item: any,
@@ -74,7 +75,13 @@ export function resolveLinePrices(
 
   let wholesale: number | null = null;
   const wholesaleFromPrices =
-    prices.find((p) => Number(p.min_quantity) >= WHOLESALE_MIN_QUANTITY) ??
+    prices.find(
+      (p) =>
+        p.min_quantity != null &&
+        Number(p.min_quantity) > 1 &&
+        p.max_quantity == null &&
+        !hasRules(p)
+    ) ??
     prices.find((p) => p.min_quantity != null && Number(p.min_quantity) > 1);
   if (wholesaleFromPrices) {
     wholesale = Number(wholesaleFromPrices.amount);
@@ -106,13 +113,16 @@ export type LinePricing = {
  * de cliente) no la regresen al precio calculado. Sin mayoreo, vuelve al precio
  * normal con is_custom_price = false, para que Medusa la vuelva a calcular.
  */
-export function planCartWholesale(cart: any): {
+export function planCartWholesale(
+  cart: any,
+  threshold: number
+): {
   wholesale: WholesaleSummary;
   updates: LineUpdate[];
   lines: LinePricing[];
 } {
   const items: any[] = cart.items ?? [];
-  const wholesale = summarizeWholesale(items);
+  const wholesale = summarizeWholesale(items, threshold);
   const currencyCode = (cart.currency_code || "mxn").toLowerCase();
 
   const updates: LineUpdate[] = [];
