@@ -4,6 +4,7 @@ import Image from "next/image";
 import { LuX, LuTag } from "react-icons/lu";
 import { type CartItem } from "@/lib/cartProducts";
 import CustomIcon from "../layout/CustomIcon";
+import QuantityInput from "./QuantityInput";
 import { formatPrice } from "@/lib/utils";
 
 type ItemListProps = {
@@ -11,6 +12,8 @@ type ItemListProps = {
   isRemoving: boolean;
   onIncrease: (id: string) => void;
   onDecrease: (id: string) => void;
+  onSetQuantity: (id: string, quantity: number) => void;
+  maxQuantity: number;
   onRemove: (id: string) => void;
   onLinkClick: () => void; // para cerrar el panel al navegar al producto
 };
@@ -20,6 +23,8 @@ export default function ItemList({
   isRemoving,
   onIncrease,
   onDecrease,
+  onSetQuantity,
+  maxQuantity,
   onRemove,
   onLinkClick,
 }: ItemListProps) {
@@ -71,23 +76,14 @@ export default function ItemList({
         <span className="text-sm text-gray-500">Talla: {item.size}</span>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="flex items-center gap-1 rounded-lg border border-gray-200 text-sm">
-            <button
-              onClick={() => onDecrease(item.id)}
-              className="flex h-6 w-6 items-center justify-center text-gray-500 hover:text-black"
-              aria-label="Disminuir cantidad"
-            >
-              −
-            </button>
-            <span className="w-4 text-center font-medium">{item.quantity}</span>
-            <button
-              onClick={() => onIncrease(item.id)}
-              className="flex h-6 w-6 items-center justify-center text-gray-500 hover:text-black"
-              aria-label="Aumentar cantidad"
-            >
-              +
-            </button>
-          </div>
+          <QuantityInput
+            value={item.quantity}
+            name={item.name}
+            max={maxQuantity}
+            onDecrease={() => onDecrease(item.id)}
+            onIncrease={() => onIncrease(item.id)}
+            onCommit={(quantity) => onSetQuantity(item.id, quantity)}
+          />
 
           <div className="flex items-baseline gap-2 flex-wrap">
             {item.originalPrice && item.originalPrice > item.price && (
@@ -96,7 +92,8 @@ export default function ItemList({
               </span>
             )}
             <span className="text-base font-bold">
-              {formatPrice(item.price, item.currency)}
+              {/* Línea provisional: el precio llega con la respuesta del servidor */}
+              {item.pending ? "…" : formatPrice(item.price, item.currency)}
             </span>
           </div>
         </div>

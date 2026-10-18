@@ -26,6 +26,8 @@ export default function SideListProducts({
     increase,
     decrease,
     remove,
+    setQuantity,
+    maxQuantity,
     isOpen: contextIsOpen,
     closeCart,
   } = useCart();
@@ -120,6 +122,8 @@ export default function SideListProducts({
                 isRemoving={removingIds.has(item.id)}
                 onIncrease={increase}
                 onDecrease={decrease}
+                onSetQuantity={setQuantity}
+                maxQuantity={maxQuantity}
                 onRemove={handleRemove}
                 onLinkClick={handleClose}
               />

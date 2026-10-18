@@ -7,7 +7,7 @@ import OrderSummaryItem from "./OrderSummaryItem";
 import WholesaleProgressBar from "../ShopingCart/WholesaleProgressBar";
 
 export default function OrderSummary() {
-  const { items, isWholesale, increase, decrease, remove } = useCart();
+  const { items, isWholesale, increase, decrease, remove, setQuantity, maxQuantity } = useCart();
   const [discountCode, setDiscountCode] = useState("");
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -26,6 +26,8 @@ export default function OrderSummary() {
               item={item}
               onIncrease={increase}
               onDecrease={decrease}
+              onSetQuantity={setQuantity}
+              maxQuantity={maxQuantity}
               onRemove={remove}
             />
           ))}

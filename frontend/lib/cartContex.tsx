@@ -12,11 +12,13 @@ import {
 } from "react";
 import {
   getOrCreateCart,
-  addLineItem,
-  updateLineItemQuantity,
-  removeLineItem,
-  syncWholesalePricing,
+  fetchServerCart,
+  syncCart,
+  toDesiredItems,
+  visualPrice,
+  DEFAULT_MAX_QUANTITY,
   type CartItem,
+  type CartSnapshot,
   type WholesaleInfo,
 } from "@/lib/cartProducts";
 
@@ -34,21 +36,24 @@ type CartContextValue = {
   isWholesale: boolean;
   pairsUntilWholesale: number;
   wholesaleLabel: string | null;
+  maxQuantity: number;
   isOpen: boolean;
   openCart: () => void;
   closeCart: () => void;
   toggleCart: () => void;
   addItem: (variantId: string, quantity?: number, productName?: string) => Promise<boolean>;
-  increase: (id: string) => Promise<void>;
-  decrease: (id: string) => Promise<void>;
-  remove: (id: string) => Promise<void>;
+  setQuantity: (id: string, quantity: number) => void;
+  increase: (id: string) => void;
+  decrease: (id: string) => void;
+  remove: (id: string) => void;
   toast: CartToastState | null;
   hideToast: () => void;
 };
 
-type CartSnapshot = { items: CartItem[]; wholesale: WholesaleInfo };
-
 const CartContext = createContext<CartContextValue | null>(null);
+
+/** Espera tras el último cambio antes de enviar el estado completo al servidor. */
+const SYNC_DEBOUNCE_MS = 300;
 
 const DEFAULT_WHOLESALE: WholesaleInfo = {
   applied: false,
@@ -62,30 +67,52 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [cartId, setCartId] = useState<string | null>(null);
   const [items, setItems] = useState<CartItem[]>([]);
   const [wholesale, setWholesale] = useState<WholesaleInfo>(DEFAULT_WHOLESALE);
+  const [maxQuantity, setMaxQuantity] = useState<number>(DEFAULT_MAX_QUANTITY);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [toast, setToast] = useState<CartToastState | null>(null);
 
   // Copia síncrona de items: evita leer valores viejos al pulsar +/- rápido
   const itemsRef = useRef<CartItem[]>([]);
-  // Cola: las operaciones del carrito se ejecutan una tras otra
-  const queueRef = useRef<Promise<void>>(Promise.resolve());
-  const pendingRef = useRef(0);
+  const cartIdRef = useRef<string | null>(null);
+  const maxQuantityRef = useRef(DEFAULT_MAX_QUANTITY);
+
+  // Control de sincronización: versión local vs. versión enviada
+  const versionRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightRef = useRef(false);
+  const flushAgainRef = useRef(false);
+  // Quienes esperan el resultado del próximo envío (p. ej. addItem)
+  const waitersRef = useRef<((ok: boolean) => void)[]>([]);
 
   const commitItems = useCallback((next: CartItem[]) => {
     itemsRef.current = next;
     setItems(next);
   }, []);
 
+  const applySnapshot = useCallback(
+    (snap: CartSnapshot) => {
+      commitItems(snap.items);
+      setWholesale(snap.wholesale);
+      maxQuantityRef.current = snap.maxQuantity;
+      setMaxQuantity(snap.maxQuantity);
+    },
+    [commitItems]
+  );
+
+  /** Hay cambios locales que el servidor aún no recibió. */
+  const hasPendingChanges = (sentVersion: number) =>
+    versionRef.current !== sentVersion || timerRef.current !== null;
+
   // Inicializar carrito
   useEffect(() => {
     let mounted = true;
     getOrCreateCart()
-      .then(({ cartId, items, wholesale }) => {
+      .then(({ cartId, ...snap }) => {
         if (!mounted) return;
+        cartIdRef.current = cartId;
         setCartId(cartId);
-        commitItems(items);
-        setWholesale(wholesale);
+        applySnapshot(snap);
       })
       .catch((err) => {
         console.error("Error al inicializar el carrito:", err);
@@ -96,8 +123,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false;
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [commitItems]);
+  }, [applySnapshot]);
 
   const openCart = useCallback(() => setIsOpen(true), []);
   const closeCart = useCallback(() => setIsOpen(false), []);
@@ -114,42 +142,141 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }, 4000);
   }, []);
 
-  // Ejecuta las operaciones una por una, en el orden en que se pulsaron
-  const enqueue = useCallback((task: () => Promise<void>): Promise<void> => {
-    pendingRef.current += 1;
-    const run = queueRef.current
-      .then(task)
-      .catch((err) => console.error("Error en operación del carrito:", err))
-      .finally(() => {
-        pendingRef.current -= 1;
-      });
-    queueRef.current = run;
-    return run;
-  }, []);
+  /**
+   * Envía el estado completo deseado. Solo un envío a la vez; si hubo cambios
+   * mientras tanto, se envía otra vez al terminar.
+   */
+  const flush = useCallback(async () => {
+    timerRef.current = null;
+    const id = cartIdRef.current;
+    if (!id) return;
+    if (inFlightRef.current) {
+      flushAgainRef.current = true;
+      return;
+    }
 
-  // Solo la ÚLTIMA operación de la cola pinta el estado del servidor;
-  // las intermedias se ignoran porque ya hay algo más nuevo pendiente.
-  const applyServer = useCallback(
-    (res: CartSnapshot) => {
-      if (pendingRef.current > 1) return;
-      commitItems(res.items);
-      setWholesale(res.wholesale);
-    },
-    [commitItems]
-  );
+    inFlightRef.current = true;
+    const sentVersion = versionRef.current;
+    const waiters = waitersRef.current.splice(0);
+    let ok = false;
 
-  const resync = useCallback(
-    async (id: string) => {
-      try {
-        applyServer(await syncWholesalePricing(id));
-      } catch (err) {
-        console.error("No se pudo resincronizar el carrito:", err);
+    try {
+      const snap = await syncCart(id, toDesiredItems(itemsRef.current));
+      ok = true;
+      // El servidor solo reemplaza el estado local si no hay cambios pendientes
+      if (!hasPendingChanges(sentVersion)) applySnapshot(snap);
+    } catch (err) {
+      console.error("Error al sincronizar el carrito:", err);
+      // Rollback: si no hay cambios más nuevos, volver al estado real del servidor.
+      // Si los hay, el próximo envío (estado completo, idempotente) lo corrige.
+      if (!hasPendingChanges(sentVersion)) {
+        try {
+          applySnapshot(await fetchServerCart(id));
+        } catch (resyncErr) {
+          console.error("No se pudo resincronizar el carrito:", resyncErr);
+        }
       }
+    } finally {
+      inFlightRef.current = false;
+      waiters.forEach((resolve) => resolve(ok));
+      if (flushAgainRef.current) {
+        flushAgainRef.current = false;
+        void flush();
+      }
+    }
+  }, [applySnapshot]);
+
+  /** Aplica un cambio local al instante y programa el envío con debounce. */
+  const change = useCallback(
+    (next: CartItem[]) => {
+      commitItems(next);
+      versionRef.current += 1;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => void flush(), SYNC_DEBOUNCE_MS);
     },
-    [applyServer]
+    [commitItems, flush]
   );
 
-  // Valores calculados localmente: barra y texto siempre coinciden
+  const waitForSync = () =>
+    new Promise<boolean>((resolve) => waitersRef.current.push(resolve));
+
+  /** Única ruta para cambiar cantidades: botones, input y agregar. */
+  const setQuantity = useCallback(
+    (id: string, quantity: number) => {
+      const current = itemsRef.current;
+      if (!current.some((it) => it.id === id)) return;
+      if (quantity <= 0) {
+        change(current.filter((it) => it.id !== id));
+        return;
+      }
+      const clamped = Math.min(Math.floor(quantity), maxQuantityRef.current);
+      change(current.map((it) => (it.id === id ? { ...it, quantity: clamped } : it)));
+    },
+    [change]
+  );
+
+  const increase = useCallback(
+    (id: string) => {
+      const item = itemsRef.current.find((it) => it.id === id);
+      if (item) setQuantity(id, item.quantity + 1);
+    },
+    [setQuantity]
+  );
+
+  const decrease = useCallback(
+    (id: string) => {
+      const item = itemsRef.current.find((it) => it.id === id);
+      if (item) setQuantity(id, item.quantity - 1);
+    },
+    [setQuantity]
+  );
+
+  const remove = useCallback((id: string) => setQuantity(id, 0), [setQuantity]);
+
+  async function addItem(
+    variantId: string,
+    quantity: number = 1,
+    productName?: string
+  ): Promise<boolean> {
+    if (!cartIdRef.current) {
+      console.warn("No hay carrito disponible aún");
+      return false;
+    }
+
+    const existing = itemsRef.current.find((it) => it.variantId === variantId);
+    if (existing) {
+      setQuantity(existing.id, existing.quantity + quantity);
+    } else {
+      // Línea provisional: el servidor la reemplaza con los datos reales
+      change([
+        ...itemsRef.current,
+        {
+          id: `pending:${variantId}`,
+          variantId,
+          slug: "",
+          name: productName ?? "Producto",
+          size: "",
+          quantity: Math.min(quantity, maxQuantityRef.current),
+          price: 0,
+          currency: "mxn",
+          pending: true,
+        },
+      ]);
+    }
+
+    const ok = await waitForSync();
+    showToast(
+      ok
+        ? productName
+          ? `¡${productName} agregado al carrito!`
+          : "¡Producto agregado al carrito!"
+        : "Error al agregar el producto. Intenta nuevamente.",
+      ok ? productName : undefined
+    );
+    return ok;
+  }
+
+  // Valores calculados localmente: barra, texto y precios siempre coinciden
   const totalPairs = items.reduce((sum, item) => sum + item.quantity, 0);
   const threshold = wholesale.threshold;
   const isWholesale = totalPairs >= threshold;
@@ -158,93 +285,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
     ? wholesale.label ?? `Precio de mayoreo (${threshold}+ pares)`
     : null;
 
-  async function addItem(
-    variantId: string,
-    quantity: number = 1,
-    productName?: string
-  ): Promise<boolean> {
-    if (!cartId) {
-      console.warn("No hay carrito disponible aún");
-      return false;
-    }
-
-    let ok = false;
-    await enqueue(async () => {
-      try {
-        applyServer(await addLineItem(cartId, variantId, quantity));
-        ok = true;
-        showToast(
-          productName
-            ? `¡${productName} agregado al carrito!`
-            : "¡Producto agregado al carrito!",
-          productName
-        );
-      } catch (err) {
-        console.error("Error al agregar producto al carrito:", err);
-        showToast("Error al agregar el producto. Intenta nuevamente.");
-        await resync(cartId);
-      }
-    });
-    return ok;
-  }
-
-  function setQuantity(id: string, quantity: number): Promise<void> {
-    if (!cartId) return Promise.resolve();
-    // Optimista, partiendo SIEMPRE del valor más reciente
-    commitItems(
-      itemsRef.current.map((it) => (it.id === id ? { ...it, quantity } : it))
-    );
-    return enqueue(async () => {
-      try {
-        applyServer(await updateLineItemQuantity(cartId, id, quantity));
-      } catch (err) {
-        console.error("Error al actualizar cantidad:", err);
-        await resync(cartId);
-      }
-    });
-  }
-
-  async function increase(id: string) {
-    const current = itemsRef.current.find((it) => it.id === id);
-    if (!current) return;
-    await setQuantity(id, current.quantity + 1);
-  }
-
-  async function decrease(id: string) {
-    const current = itemsRef.current.find((it) => it.id === id);
-    if (!current) return;
-    if (current.quantity <= 1) return remove(id);
-    await setQuantity(id, current.quantity - 1);
-  }
-
-  async function remove(id: string) {
-    if (!cartId) return;
-    commitItems(itemsRef.current.filter((it) => it.id !== id));
-    await enqueue(async () => {
-      try {
-        applyServer(await removeLineItem(cartId, id));
-      } catch (err) {
-        console.error("Error al eliminar item del carrito:", err);
-        await resync(cartId);
-      }
-    });
-  }
+  // Precio visual según el total local de pares (antes de que responda el servidor)
+  const visibleItems = items.map((it) => {
+    const usesWholesale = isWholesale && it.wholesalePrice !== undefined;
+    return {
+      ...it,
+      price: visualPrice(it, isWholesale),
+      wholesaleLabel: usesWholesale ? wholesaleLabel ?? undefined : undefined,
+    };
+  });
 
   return (
     <CartContext.Provider
       value={{
-        items,
+        items: visibleItems,
         cartId,
         isLoading,
         totalPairs,
         isWholesale,
         pairsUntilWholesale,
         wholesaleLabel,
+        maxQuantity,
         isOpen,
         openCart,
         closeCart,
         toggleCart,
         addItem,
+        setQuantity,
         increase,
         decrease,
         remove,

@@ -17,6 +17,8 @@ import { updateProductVariantsWorkflow } from "@medusajs/medusa/core-flows";
 
 export const WHOLESALE_MIN_QUANTITY = 15;
 export const WHOLESALE_CURRENCY = "mxn";
+/** Cantidad máxima por línea que acepta PUT /store/custom/carts/:id/sync. */
+export const MAX_ITEM_QUANTITY = 9999;
 
 /** Campos de query.graph necesarios para planear precios de una variante. */
 export const VARIANT_PRICE_FIELDS = [

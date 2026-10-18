@@ -3,11 +3,14 @@ import { LuX } from "react-icons/lu";
 import type { CartItem } from "@/lib/cartProducts";
 import { formatPrice } from "@/lib/utils";
 import CustomIcon from "../layout/CustomIcon";
+import QuantityInput from "../ShopingCart/QuantityInput";
 
 interface OrderSummaryItemProps {
   item: CartItem;
   onIncrease: (id: string) => void;
   onDecrease: (id: string) => void;
+  onSetQuantity: (id: string, quantity: number) => void;
+  maxQuantity: number;
   onRemove: (id: string) => void;
 }
 
@@ -15,6 +18,8 @@ export default function OrderSummaryItem({
   item,
   onIncrease,
   onDecrease,
+  onSetQuantity,
+  maxQuantity,
   onRemove,
 }: OrderSummaryItemProps) {
   return (
@@ -32,29 +37,23 @@ export default function OrderSummaryItem({
           <p className="text-sm font-medium leading-tight">{item.name}</p>
           <p className="text-xs text-gray-500">Talla: {item.size}</p>
 
-          {/* Mismo control +/- que ItemList, en versión compacta */}
-          <div className="flex items-center gap-1 rounded-md border border-gray-200 text-xs w-fit mt-1">
-            <button
-              onClick={() => onDecrease(item.id)}
-              className="flex h-5 w-5 items-center justify-center text-gray-500 hover:text-black"
-              aria-label="Disminuir cantidad"
-            >
-              −
-            </button>
-            <span className="w-4 text-center font-medium">{item.quantity}</span>
-            <button
-              onClick={() => onIncrease(item.id)}
-              className="flex h-5 w-5 items-center justify-center text-gray-500 hover:text-black"
-              aria-label="Aumentar cantidad"
-            >
-              +
-            </button>
+          {/* Mismo control que ItemList, en versión compacta */}
+          <div className="mt-1">
+            <QuantityInput
+              size="xs"
+              value={item.quantity}
+              name={item.name}
+              max={maxQuantity}
+              onDecrease={() => onDecrease(item.id)}
+              onIncrease={() => onIncrease(item.id)}
+              onCommit={(quantity) => onSetQuantity(item.id, quantity)}
+            />
           </div>
         </div>
 
         <div className="flex flex-col items-end gap-1">
           <span className="whitespace-nowrap text-sm font-medium">
-            {formatPrice(item.price, item.currency)}
+            {item.pending ? "…" : formatPrice(item.price, item.currency)}
           </span>
           <button
             onClick={() => onRemove(item.id)}
