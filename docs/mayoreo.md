@@ -214,9 +214,15 @@ Archivo: `backend/apps/backend/src/admin/widgets/wholesale-settings.tsx`, zona
 - Un campo **"Mínimo de pares para mayoreo"** con el valor actual
   (`GET /admin/wholesale-settings`). Solo admite dígitos.
 - **Guardar** (o Enter): valida un entero entre 2 y 9999, pide al backend un
-  `dry_run` y abre el diálogo de confirmación (`usePrompt`) con el umbral
-  actual y el nuevo, cuántos precios de mayoreo se actualizarán y cuántas
-  variantes no se tocarán. Botones **Guardar** y **Cancelar**.
+  `dry_run` (de ahí sale el umbral actual) y abre el diálogo de confirmación
+  (`usePrompt`):
+  - Título: "Cambiar el mínimo de pares para mayoreo".
+  - Descripción: "El mínimo pasará de {actual} a {nuevo} pares. Se actualizará
+    para todos los productos actuales y sus variantes (tallas). ¿Continuar?"
+  - Botones **Cancelar** y **Guardar**.
+
+  El diálogo ya no muestra cuántos precios se actualizarán ni cuántas variantes
+  quedan fuera; las variantes `blocked` se informan después, en el toast.
 - Al confirmar llama a `POST /admin/wholesale-settings`. Resultados, variantes
   `blocked` y errores se muestran **solo como toast**.
 

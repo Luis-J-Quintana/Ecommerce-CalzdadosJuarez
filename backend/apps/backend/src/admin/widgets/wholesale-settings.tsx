@@ -93,11 +93,7 @@ const WholesaleSettingsWidget = () => {
         title: "Cambiar el mínimo de pares para mayoreo",
         description:
           `El mínimo pasará de ${preview.current_threshold} a ${threshold} pares. ` +
-          `Se actualizará el min_quantity de ${preview.updated_prices} precio(s) de mayoreo.` +
-          (preview.blocked.length
-            ? ` ${preview.blocked.length} variante(s) no se tocarán (precios duplicados o inválidos).`
-            : "") +
-          " ¿Continuar?",
+          "Se actualizará para todos los productos actuales y sus variantes (tallas). ¿Continuar?",
         confirmText: "Guardar",
         cancelText: "Cancelar",
       });
