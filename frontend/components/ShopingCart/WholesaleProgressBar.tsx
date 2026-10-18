@@ -4,8 +4,8 @@ import { useCart } from "@/lib/cartContex";
 import { LuSparkles, LuTag } from "react-icons/lu";
 
 export default function WholesaleProgressBar() {
-  const { totalPairs, isWholesale, pairsUntilWholesale } = useCart();
-  const threshold = 15;
+  // threshold sale de la última respuesta de sync del servidor
+  const { totalPairs, isWholesale, threshold, pairsUntilWholesale } = useCart();
   const percentage = Math.min(100, Math.round((totalPairs / threshold) * 100));
 
   if (totalPairs === 0) {
@@ -13,7 +13,7 @@ export default function WholesaleProgressBar() {
       <div className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-xs">
         <div className="flex items-center gap-2 text-xs font-semibold text-gray-700">
           <LuTag size={16} className="text-black shrink-0" />
-          <span>Precio de mayoreo automático a partir de 15 pares surtidos</span>
+          <span>Precio de mayoreo automático a partir de {threshold} pares surtidos</span>
         </div>
       </div>
     );

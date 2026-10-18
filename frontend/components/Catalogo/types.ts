@@ -12,8 +12,8 @@ export interface Product {
   code: string;
   name: string; /* Nombre del producto */
   price: number; /* Precio individual */
-  precioMayoreo: number; /*Precio mayoreo*/
-  cantMinMayoreo: number; /* Cantidad minima para ser mayorista*/
+  precioMayoreo?: number; /*Precio mayoreo (menor de sus variantes); vacío si no tiene mayoreo*/
+  cantMinMayoreo?: number; /* Cantidad minima para ser mayorista (umbral global del servidor)*/
   image: string;
   hoverImage?: string;
   gallery?: string[];

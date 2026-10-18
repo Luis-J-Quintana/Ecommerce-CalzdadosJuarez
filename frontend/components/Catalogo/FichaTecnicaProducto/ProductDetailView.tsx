@@ -54,14 +54,18 @@ export default function ProductDetailView({ product }: ProductDetailViewProps) {
         <p className="mt-2 text-2xl font-bold">
           ${product.price.toFixed(2)} {product.currency ?? "MXN"}
         </p>
-        {/* Precio de mayoreo*/}
-        <p className="mt-1 text-sm text-gray-700">
-          A partir de {product.cantMinMayoreo} pares:{" "}
-          <span className="font-bold">${product.precioMayoreo.toFixed(2)}</span> c/u
-        </p>
-        <p className="mt-1 text-xs text-gray-500">
-          * Aplica combinando cualquier modelo o talla de la tienda.
-        </p>
+        {/* Precio de mayoreo (línea y nota solo si el producto tiene mayoreo) */}
+        {product.precioMayoreo && product.cantMinMayoreo ? (
+          <>
+            <p className="mt-1 text-sm text-gray-700">
+              A partir de {product.cantMinMayoreo} pares:{" "}
+              <span className="font-bold">${product.precioMayoreo.toFixed(2)}</span> c/u
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              * Aplica combinando cualquier modelo o talla de la tienda.
+            </p>
+          </>
+        ) : null}
         {/* Selector de talla */}
         <div className="mt-6">
           <p className="text-sm font-semibold">

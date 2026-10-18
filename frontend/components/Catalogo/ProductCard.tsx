@@ -90,14 +90,16 @@ export default function ProductCard({ product }: ProductCardProps) {
             Precio individual:{" "}
             <span className="font-bold">${product.price.toFixed(2)}</span>
           </p>
-          {/* Precio de mayoreo: aplica a partir de "cantMinMayoreo" pares */}
-          <p className="text-sm text-gray-700">
-            Mayoreo ({product.cantMinMayoreo}+ pares):{" "}
-            <span className="font-bold">
-              ${product.precioMayoreo.toFixed(2)}
-            </span>{" "}
-            c/u
-          </p>
+          {/* Precio de mayoreo: aplica a partir de "cantMinMayoreo" pares; sin mayoreo no se muestra */}
+          {product.precioMayoreo && product.cantMinMayoreo ? (
+            <p className="text-sm text-gray-700">
+              Mayoreo ({product.cantMinMayoreo}+ pares):{" "}
+              <span className="font-bold">
+                ${product.precioMayoreo.toFixed(2)}
+              </span>{" "}
+              c/u
+            </p>
+          ) : null}
         </div>
       </Link>
       {/* Botón que lleva a la página de detalle del producto */}

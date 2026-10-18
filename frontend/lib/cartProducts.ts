@@ -29,24 +29,27 @@ export type WholesaleInfo = {
   label: string | null;
 };
 
-export type CartResponseData = {
+export type CartResponseData = CartSnapshot & {
   cartId: string;
-  items: CartItem[];
-  wholesale: WholesaleInfo;
-  maxQuantity: number;
 };
 
 export type CartSnapshot = {
   items: CartItem[];
   wholesale: WholesaleInfo;
   maxQuantity: number;
+  /**
+   * true si `wholesale` (umbral incluido) viene de una respuesta de sync; false
+   * si es un cálculo local de respaldo, que no debe pisar el último umbral conocido.
+   */
+  fromServer: boolean;
 };
 
 /** Estado deseado que se envía a PUT /store/custom/carts/:id/sync. */
 export type DesiredItem = { variant_id: string; quantity: number };
 
 const CART_ID_COOKIE = "cart_id";
-const DEFAULT_WHOLESALE_THRESHOLD = 15;
+/** Umbral solo hasta la primera respuesta del servidor; luego manda el de sync. */
+export const INITIAL_WHOLESALE_THRESHOLD = 15;
 /** Debe coincidir con MAX_ITEM_QUANTITY del backend; el servidor lo confirma en cada respuesta. */
 export const DEFAULT_MAX_QUANTITY = 9999;
 
@@ -92,7 +95,7 @@ function mapLineItem(item: any, wholesaleLabel?: string | null): CartItem {
  */
 export function computeFallbackWholesale(
   items: { quantity?: unknown }[],
-  threshold = DEFAULT_WHOLESALE_THRESHOLD
+  threshold = INITIAL_WHOLESALE_THRESHOLD
 ): WholesaleInfo {
   const totalPairs = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const applied = totalPairs >= threshold;
@@ -157,6 +160,7 @@ export async function syncCart(cartId: string, items: DesiredItem[]): Promise<Ca
     items: (res.cart?.items ?? []).map((item: any) => mapLineItem(item, labelToApply)),
     wholesale,
     maxQuantity: Number(res.max_quantity) || DEFAULT_MAX_QUANTITY,
+    fromServer: true,
   };
 }
 
@@ -182,6 +186,7 @@ export async function fetchServerCart(cartId: string): Promise<CartSnapshot> {
       items: (cart.items ?? []).map((item: any) => mapLineItem(item, labelToApply)),
       wholesale,
       maxQuantity: DEFAULT_MAX_QUANTITY,
+      fromServer: false,
     };
   }
 }
@@ -204,10 +209,16 @@ export async function getOrCreateCart(): Promise<CartResponseData> {
     region_id: process.env.NEXT_PUBLIC_MEDUSA_REGION_ID,
   });
   setCartId(cart.id);
-  return {
-    cartId: cart.id,
-    items: [],
-    wholesale: computeFallbackWholesale([]),
-    maxQuantity: DEFAULT_MAX_QUANTITY,
-  };
+  try {
+    // Sync vacío: no cambia nada, pero trae el umbral real del servidor.
+    return { cartId: cart.id, ...(await syncCart(cart.id, [])) };
+  } catch {
+    return {
+      cartId: cart.id,
+      items: [],
+      wholesale: computeFallbackWholesale([]),
+      maxQuantity: DEFAULT_MAX_QUANTITY,
+      fromServer: false,
+    };
+  }
 }

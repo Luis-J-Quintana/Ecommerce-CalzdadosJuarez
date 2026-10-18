@@ -102,8 +102,7 @@ function mapProduct(p: any): Product {
     code: meta.code ?? p.variants?.[0]?.sku ?? p.handle,
     name: p.title,
     price,
-    precioMayoreo: num(meta.precio_mayoreo, price),
-    cantMinMayoreo: num(meta.cant_min_mayoreo, 0),
+    // precioMayoreo y cantMinMayoreo los rellena attachWholesale (servidor)
     image,
     hoverImage: gallery[1],
     gallery,
@@ -129,6 +128,45 @@ function mapProduct(p: any): Product {
   };
 }
 
+// ---------- Mayoreo (umbral global y menor precio de mayoreo por producto) ----------
+type WholesaleResponse = {
+  threshold: number;
+  products: { product_id: string; wholesale_price: number }[];
+};
+
+/** Máximo de ids que acepta GET /store/custom/products/wholesale. */
+const WHOLESALE_MAX_IDS = 100;
+
+/**
+ * Rellena precioMayoreo y cantMinMayoreo con una sola petición a
+ * GET /store/custom/products/wholesale. Los productos sin mayoreo (o si la
+ * petición falla) quedan sin esos campos y no muestran la línea de mayoreo.
+ */
+async function attachWholesale(products: Product[]): Promise<Product[]> {
+  const ids = products.map((p) => p.id).slice(0, WHOLESALE_MAX_IDS);
+  if (!ids.length) return products;
+
+  try {
+    const res = await sdk.client.fetch<WholesaleResponse>(
+      "/store/custom/products/wholesale",
+      { query: { product_ids: ids.join(",") } }
+    );
+    const threshold = num(res.threshold, 0);
+    const byId = new Map(res.products.map((w) => [w.product_id, num(w.wholesale_price, 0)]));
+
+    return products.map((p) => {
+      const precioMayoreo = byId.get(p.id);
+      return precioMayoreo && precioMayoreo > 0 && threshold > 0
+        ? { ...p, precioMayoreo, cantMinMayoreo: threshold }
+        : p;
+    });
+  } catch (err) {
+    // TODO temporal: quitar cuando el endpoint de mayoreo esté estable
+    console.error("No se pudo cargar el precio de mayoreo:", err);
+    return products;
+  }
+}
+
 // ---------- Consultas ----------
 /**
  * Sin argumento: todos los productos.
@@ -145,7 +183,7 @@ export async function getProducts(categoryHandle?: string): Promise<Product[]> {
   }
 
   const { products } = await sdk.store.product.list(query);
-  return products.map(mapProduct);
+  return attachWholesale(products.map(mapProduct));
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | null> {
@@ -156,5 +194,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
     fields: FIELDS,
   });
 
-  return products[0] ? mapProduct(products[0]) : null;
+  if (!products[0]) return null;
+  const [product] = await attachWholesale([mapProduct(products[0])]);
+  return product;
 }

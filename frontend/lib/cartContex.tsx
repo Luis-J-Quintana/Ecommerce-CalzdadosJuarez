@@ -16,7 +16,9 @@ import {
   syncCart,
   toDesiredItems,
   visualPrice,
+  computeFallbackWholesale,
   DEFAULT_MAX_QUANTITY,
+  INITIAL_WHOLESALE_THRESHOLD,
   type CartItem,
   type CartSnapshot,
   type WholesaleInfo,
@@ -34,6 +36,8 @@ type CartContextValue = {
   isLoading: boolean;
   totalPairs: number;
   isWholesale: boolean;
+  /** Umbral global de pares (el de la última respuesta de sync). */
+  threshold: number;
   pairsUntilWholesale: number;
   wholesaleLabel: string | null;
   maxQuantity: number;
@@ -55,13 +59,8 @@ const CartContext = createContext<CartContextValue | null>(null);
 /** Espera tras el último cambio antes de enviar el estado completo al servidor. */
 const SYNC_DEBOUNCE_MS = 300;
 
-const DEFAULT_WHOLESALE: WholesaleInfo = {
-  applied: false,
-  totalPairs: 0,
-  threshold: 15,
-  pairsRemaining: 15,
-  label: null,
-};
+// Solo hasta la primera respuesta del servidor.
+const DEFAULT_WHOLESALE: WholesaleInfo = computeFallbackWholesale([], INITIAL_WHOLESALE_THRESHOLD);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cartId, setCartId] = useState<string | null>(null);
@@ -93,7 +92,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const applySnapshot = useCallback(
     (snap: CartSnapshot) => {
       commitItems(snap.items);
-      setWholesale(snap.wholesale);
+      // Un cálculo local de respaldo conserva el último umbral que mandó el servidor.
+      setWholesale((prev) =>
+        snap.fromServer ? snap.wholesale : computeFallbackWholesale(snap.items, prev.threshold)
+      );
       maxQuantityRef.current = snap.maxQuantity;
       setMaxQuantity(snap.maxQuantity);
     },
@@ -303,6 +305,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         isLoading,
         totalPairs,
         isWholesale,
+        threshold,
         pairsUntilWholesale,
         wholesaleLabel,
         maxQuantity,
