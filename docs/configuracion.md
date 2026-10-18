@@ -1,6 +1,6 @@
 # Configuración y pruebas
 
-Última actualización: 17 de octubre de 2026
+Última actualización: 18 de octubre de 2026
 
 | Sección | Contenido |
 |---|---|
@@ -8,7 +8,8 @@
 | [2. Variables del backend](#2-variables-del-backend) | `backend/apps/backend/.env` |
 | [3. Variables de Docker](#3-variables-de-docker) | `.env` de la raíz |
 | [4. Script de mayoreo](#4-script-de-mayoreo) | Cómo correrlo |
-| [5. Probar el flujo completo](#5-probar-el-flujo-completo) | Paso a paso |
+| [5. Migración del módulo de mayoreo](#5-migración-del-módulo-de-mayoreo) | `db:generate` y `db:migrate` |
+| [6. Probar el flujo completo](#6-probar-el-flujo-completo) | Paso a paso |
 
 > Este documento solo lista nombres y placeholders. **Nunca** copies llaves,
 > contraseñas ni la `DATABASE_URL` reales en la documentación ni en el
@@ -84,22 +85,52 @@ npx medusa exec ./src/scripts/seed-mayoreo.ts ./data/mayoreo.json
 
 Detalles en [mayoreo.md](./mayoreo.md#7-script-seed-mayoreots).
 
-## 5. Probar el flujo completo
+## 5. Migración del módulo de mayoreo
+
+El umbral global vive en el módulo propio `wholesaleSettings`
+(`src/modules/wholesale-settings`), registrado en `medusa-config.ts` con
+`resolve: "./src/modules/wholesale-settings"`. Su tabla (`wholesale_setting`)
+necesita una migración, que **no está en el repositorio**: hay que generarla y
+correrla una vez, desde `backend/apps/backend` y con `DATABASE_URL` apuntando a
+la base correcta:
+
+```bash
+# 1. Genera el archivo en src/modules/wholesale-settings/migrations/
+npx medusa db:generate wholesaleSettings
+
+# 2. Aplica las migraciones pendientes (incluida la nueva)
+npx medusa db:migrate
+```
+
+- Revisa el archivo generado antes del paso 2 y súbelo al repositorio.
+- Mientras la tabla no exista, `getWholesaleThreshold` usa **15** y escribe un
+  aviso en el log; `POST /admin/wholesale-settings` sí falla.
+- No hace falta insertar ninguna fila: la primera vez que se guarda el umbral
+  desde el admin se crea.
+- La sintaxis `db:generate [modules...]` se verificó en `@medusajs/cli` 2.17.2;
+  los comandos **no se ejecutaron** al escribir esto.
+
+## 6. Probar el flujo completo
 
 1. **Arrancar**: backend con `medusa develop` (en `backend/apps/backend`, o
    `pnpm backend:dev` en `backend/`) y frontend con `next dev` en `frontend/`.
-2. **Precios**: en el admin (`<BACKEND_URL>/app`), abre un producto y en el
+2. **Umbral**: en el admin, en **Productos** (listado), el bloque **Mayoreo**
+   muestra el mínimo actual. Cámbialo (p. ej. a 12), confirma y revisa el toast
+   con los precios actualizados. Con
+   `GET /store/custom/carts/<CART_ID>/wholesale-summary`, `threshold` debe
+   devolver el valor nuevo.
+3. **Precios**: en el admin (`<BACKEND_URL>/app`), abre un producto y en el
    widget **Precios de mayoreo** guarda un mayoreo menor que el normal para cada
-   variante, o usa el script del punto 4 (primero en `dry-run`).
-3. **Endpoint**, con curl (ver [api-endpoints.md](./api-endpoints.md)):
+   variante, o usa el script de la §4 (primero en `dry-run`).
+4. **Endpoint**, con curl (ver [api-endpoints.md](./api-endpoints.md)):
    - `PUT .../sync` con `quantity: 3` → `wholesale.applied: false` y
      `unit_price` igual a `retail_price`.
    - Mismo body otra vez → `changes` en cero (idempotente).
-   - `quantity: 15` → `applied: true`, `unit_price` igual a `wholesale_price` e
+   - `quantity` igual al umbral (15 por defecto) → `applied: true`, `unit_price` igual a `wholesale_price` e
      `is_custom_price: true`.
    - Volver a `3` → precio normal e `is_custom_price: false`.
    - `quantity: 1.5`, `-1` o `10000` → 400 con mensaje.
-4. **Frontend**:
+5. **Frontend**:
    - Pulsa `+` varias veces rápido: la cantidad y el precio cambian al instante y
      en la pestaña Red del navegador aparece **un solo** `PUT .../sync` unos
      300 ms después del último clic.
@@ -109,6 +140,6 @@ Detalles en [mayoreo.md](./mayoreo.md#7-script-seed-mayoreots).
      sal: vuelve la cantidad anterior. Pulsa Escape a mitad: se cancela.
    - Escribe `99999`: se ajusta a `9999`.
    - Repite en el checkout (`/checkout`).
-5. **Rollback**: con el carrito abierto, detén el backend y cambia una cantidad:
+6. **Rollback**: con el carrito abierto, detén el backend y cambia una cantidad:
    en la consola aparece el error de sincronización. Vuelve a arrancar el backend
    y haz otro cambio: el estado se corrige con el siguiente envío.

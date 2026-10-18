@@ -6,10 +6,10 @@
 |---|---|
 | [1. La regla](#1-la-regla) | Umbral global de pares |
 | [2. Modelo de datos](#2-modelo-de-datos) | Cómo se guarda cada precio |
-| [3. Constantes compartidas](#3-constantes-compartidas) | Dónde vive el 15 |
+| [3. Umbral configurable](#3-umbral-configurable) | Tabla de ajustes, sincronización de `min_quantity` y constantes |
 | [4. Flujo del carrito](#4-flujo-del-carrito) | Clic → estado local → endpoint → workflow |
 | [5. Por qué is_custom_price](#5-por-qué-is_custom_price) | Decisión de diseño |
-| [6. Widget de admin](#6-widget-de-admin) | Editar precio normal y de mayoreo, por variante o a todas |
+| [6. Widgets de admin](#6-widgets-de-admin) | Umbral en el listado; precios por variante o a todas |
 | [7. Script seed-mayoreo.ts](#7-script-seed-mayoreots) | Carga masiva |
 | [8. ADVERTENCIAS](#8-advertencias) | Lo que no hay que hacer |
 
@@ -19,8 +19,9 @@
 
 - Se suman los pares de **todas** las líneas del carrito (umbral global, no
   por producto).
-- Si el total llega a `WHOLESALE_THRESHOLD` (15), **cada línea** usa su
-  precio de mayoreo. Si no, cada línea usa su precio normal.
+- Si el total llega al **umbral global** (configurable desde el admin, 15 por
+  defecto; ver §3), **cada línea** usa su precio de mayoreo. Si no, cada línea
+  usa su precio normal.
 - Una línea sin precio de mayoreo conocido usa su precio normal aunque se
   alcance el umbral.
 
@@ -34,42 +35,91 @@ Cada variante tiene un *price set* con varios precios. El proyecto distingue:
 | Precio | Moneda | Reglas | `min_quantity` | Quién lo gestiona |
 |---|---|---|---|---|
 | **Normal** | MXN | ninguna | `null` | Widget de admin o script (el admin nativo también, pero ver §8) |
-| **Mayoreo** | MXN | ninguna | `15` (`WHOLESALE_MIN_QUANTITY`) | Widget de admin o script |
+| **Mayoreo** | MXN | ninguna | no nulo y > 1 (se guarda igual al umbral global) | Widget de admin o script |
 | Con reglas (p. ej. `region_id`) | cualquiera | sí | cualquiera | Admin nativo; **nunca** los tocan el widget ni el script |
 | De listas de precios | cualquiera | — | — | Admin nativo; no se tocan |
+
+Un precio es **de mayoreo** si es MXN, sin reglas, no es de lista de precios,
+tiene `min_quantity` no nulo y mayor que 1 y no tiene `max_quantity`
+(`isWholesalePrice` en `src/lib/wholesale-pricing.ts`). Ya no se identifica
+por ser igual a 15. Al crearlo o guardarlo, el widget y el script le ponen
+`min_quantity` = umbral global.
 
 Cómo elige cada línea del carrito sus precios (en la moneda del carrito):
 
 - **Normal**: el precio sin `min_quantity` y sin reglas. Si no hay, usa
   `metadata.precio_menudeo` de la variante o del producto. Nunca un precio con
   `min_quantity`.
-- **Mayoreo**: el precio con `min_quantity >= 15` (o, si no hay, uno con
-  `min_quantity > 1`). Si no hay, usa `metadata.precio_mayoreo` de la variante o
-  del producto; si tampoco, el menor de varios precios.
+- **Mayoreo**: el precio sin reglas con `min_quantity` no nulo y > 1 (o, si no
+  hay, cualquier otro con `min_quantity > 1`). Si no hay, usa
+  `metadata.precio_mayoreo` de la variante o del producto; si tampoco, el menor
+  de varios precios.
+- El `min_quantity` del precio **no** decide cuándo se aplica: lo decide el
+  umbral global sobre el total de pares del carrito.
 
 > Ojo: el precio que Medusa calcula por su cuenta (`calculated_price`, el que
 > muestra el catálogo) puede ser uno con regla de región. El carrito, en
 > cambio, usa el precio **sin reglas** para el menudeo. Si ambos difieren,
 > el carrito mostrará el precio sin reglas.
 
-## 3. Constantes compartidas
+## 3. Umbral configurable
 
-En `backend/apps/backend/src/lib/wholesale-pricing.ts`:
+**Dónde vive**: en la tabla `wholesale_setting` del módulo propio
+`wholesaleSettings` (`backend/apps/backend/src/modules/wholesale-settings`,
+registrado en `medusa-config.ts`). Es una tabla de **una sola fila**
+(`{ id, threshold }`, por defecto 15); el servicio lee la primera por
+`created_at` y la crea al guardar si no existe. No usa metadata de Medusa.
+
+**Cómo se lee**: `getWholesaleThreshold(container)` en
+`src/lib/wholesale-settings.ts`. Devuelve 15 si no hay fila, si el valor no es
+válido o si la lectura falla (p. ej. antes de correr la migración; en ese caso
+escribe un aviso en el log). Lo usan:
+
+- el paso `applyCartWholesaleStep` (y por él `PUT .../sync`,
+  `POST .../sync-wholesale` y el workflow `sync-cart-items`);
+- `GET .../wholesale-summary`;
+- las rutas de admin de precios (`min_quantity` de la respuesta y del precio
+  que guardan);
+- `GET /store/custom/products/wholesale`;
+- el script `seed-mayoreo.ts`.
+
+**Cómo se cambia**: widget **Mayoreo** del listado de productos (§6) o
+`POST /admin/wholesale-settings` (entero entre 2 y 9999).
+
+**Sincronización de `min_quantity`**: al guardar un umbral nuevo, el backend
+lleva el `min_quantity` de **todos** los precios de mayoreo existentes a ese
+valor, sin cambiar montos:
+
+1. Lee todas las variantes con sus precios, por lotes de 200.
+2. Planea cada variante que tiene mayoreo con la misma lógica de
+   `wholesale-pricing.ts` (`planWholesaleThresholdSync` →
+   `planVariantPrices` con `strictDuplicates: true`).
+3. No toca precios normales, con reglas, de otras monedas ni de listas de
+   precios. Las variantes con mayoreos o normales duplicados, mayoreo sin normal
+   o mayoreo >= normal **no se tocan** y se reportan como `blocked`.
+4. El workflow `update-wholesale-threshold` guarda el umbral y aplica todos los
+   cambios en **una sola** ejecución de `updateProductVariantsWorkflow`. Si esa
+   ejecución falla, el umbral vuelve al valor anterior (compensación).
+
+Una variante `blocked` conserva su `min_quantity` anterior. Como el mayoreo se
+identifica por `min_quantity > 1`, el carrito la sigue tratando como mayoreo;
+solo queda desalineado el número guardado en el precio.
+
+**Constantes** (`src/modules/wholesale-settings/constants.ts` y
+`src/lib/wholesale-pricing.ts`):
 
 | Constante | Valor | Uso |
 |---|---|---|
-| `WHOLESALE_MIN_QUANTITY` | 15 | `min_quantity` del precio de mayoreo |
+| `DEFAULT_WHOLESALE_THRESHOLD` | 15 | Umbral si no hay fila de ajustes |
+| `WHOLESALE_MIN_QUANTITY` | = `DEFAULT_WHOLESALE_THRESHOLD` | Solo valor por defecto de `planVariantPrices` |
+| `MIN_WHOLESALE_THRESHOLD` / `MAX_WHOLESALE_THRESHOLD` | 2 / 9999 | Límites del POST de ajustes |
+| `WHOLESALE_SETTINGS_MODULE` | `"wholesaleSettings"` | Clave del módulo en el contenedor |
 | `WHOLESALE_CURRENCY` | `"mxn"` | Moneda de los precios que gestionan widget y script |
 | `MAX_ITEM_QUANTITY` | 9999 | Cantidad máxima por línea en `PUT .../sync` |
 
-`WHOLESALE_THRESHOLD` (en `cart-wholesale.ts`) es igual a
-`WHOLESALE_MIN_QUANTITY`. El widget no repite el 15: lo lee de la respuesta de
-la API. El frontend (`frontend/lib/cartProducts.ts`) tiene sus propios valores
-por defecto (umbral 15, máximo 9999) que se reemplazan con los que manda el
-servidor.
-
-Pendiente: `GET /store/custom/carts/:id/wholesale-summary` todavía tiene el
-`15` escrito a mano.
+Los widgets no repiten el umbral: lo leen de la API. El frontend
+(`frontend/lib/cartProducts.ts`) tiene sus propios valores por defecto (umbral
+15, máximo 9999), que se reemplazan con los que manda el servidor.
 
 ## 4. Flujo del carrito
 
@@ -153,7 +203,24 @@ Consecuencia conocida: `updateCartWorkflow` **elimina** las líneas con
 `is_custom_price: true` cuando cambia la región del carrito. El frontend no
 cambia la región, pero conviene tenerlo en cuenta.
 
-## 6. Widget de admin
+## 6. Widgets de admin
+
+### 6.1 Umbral: widget "Mayoreo" (listado de productos)
+
+Archivo: `backend/apps/backend/src/admin/widgets/wholesale-settings.tsx`, zona
+`product.list.before` (encima de la tabla de productos, la pantalla con el botón
+"Crear"; el nombre de la zona se verificó en `@medusajs/admin-shared` 2.17.2).
+
+- Un campo **"Mínimo de pares para mayoreo"** con el valor actual
+  (`GET /admin/wholesale-settings`). Solo admite dígitos.
+- **Guardar** (o Enter): valida un entero entre 2 y 9999, pide al backend un
+  `dry_run` y abre el diálogo de confirmación (`usePrompt`) con el umbral
+  actual y el nuevo, cuántos precios de mayoreo se actualizarán y cuántas
+  variantes no se tocarán. Botones **Guardar** y **Cancelar**.
+- Al confirmar llama a `POST /admin/wholesale-settings`. Resultados, variantes
+  `blocked` y errores se muestran **solo como toast**.
+
+### 6.2 Precios por variante (detalle de producto)
 
 Archivo: `backend/apps/backend/src/admin/widgets/wholesale-prices.tsx`, zona
 `product.details.after` (al final del detalle de producto).
@@ -165,7 +232,8 @@ Rutas que usa (detalle en [api-endpoints.md](./api-endpoints.md#3-admin)):
 **Por variante**
 
 - Cada fila tiene dos inputs, **Precio normal** y
-  **Precio de mayoreo (15+ pares)** (el 15 lo manda la API), y un botón
+  **Precio de mayoreo (N+ pares)** (N es el umbral global que manda la API en
+  `min_quantity`), y un botón
   **Guardar** que envía ambos a `POST /admin/variants/:id/wholesale-price`.
 - Mayoreo vacío + Guardar elimina solo el mayoreo. El precio normal no se puede
   vaciar si ya existe.
@@ -212,7 +280,9 @@ No verificado: no se probó en el navegador (no se ejecutó build ni el admin);
 ## 7. Script seed-mayoreo.ts
 
 Archivo: `backend/apps/backend/src/scripts/seed-mayoreo.ts`. Usa la misma
-lógica que el widget (`src/lib/wholesale-pricing.ts`).
+lógica que el widget (`src/lib/wholesale-pricing.ts`) y el umbral global
+(`getWholesaleThreshold`), así que los mayoreos que crea o actualiza quedan con
+`min_quantity` = umbral actual.
 
 **Formato del JSON**
 
@@ -241,12 +311,18 @@ de prueba es el argumento `dry-run` sin guiones (o `DRY_RUN=1`).
 **Qué hace por variante**
 
 - Deja, entre los precios MXN sin reglas, exactamente uno normal y uno de
-  mayoreo (`min_quantity` 15).
+  mayoreo (`min_quantity` = umbral global; 15 si no hay ajuste guardado).
+- Si hay varios mayoreos, deja uno y elimina los sobrantes (no usa
+  `strictDuplicates`). Ojo: ahora cuenta como mayoreo **cualquier** precio MXN
+  sin reglas con `min_quantity` > 1 y sin `max_quantity` (antes solo los de
+  `min_quantity` 15), así que un precio con, p. ej., `min_quantity` 10 también
+  se fusiona.
 - No modifica ni elimina precios con reglas ni de listas de precios.
 - Si hay varios precios MXN sin reglas y sin mínimo, no toca nada: avisa y omite
   la variante.
-- **Idempotente**: si la variante ya tiene esos montos, la omite ("sin
-  cambios"); correrlo varias veces no duplica precios.
+- **Idempotente**: si la variante ya tiene esos montos y su mayoreo ya tiene el
+  umbral actual, la omite ("sin cambios"); correrlo varias veces no duplica
+  precios.
 
 ## 8. ADVERTENCIAS
 
@@ -262,5 +338,9 @@ de prueba es el argumento `dry-run` sin guiones (o `DRY_RUN=1`).
 - Una variante con dos precios MXN sin reglas y sin mínimo hace que el widget y
   el script se nieguen a guardar: hay que dejar uno a mano. Con dos precios de
   mayoreo, el widget también se niega (el script, en cambio, los fusiona).
-- No cambies `WHOLESALE_MIN_QUANTITY` sin revisar los precios ya cargados: los
-  existentes conservan su `min_quantity` anterior.
+- Cambia el umbral **solo** desde el widget "Mayoreo" o con
+  `POST /admin/wholesale-settings`, que también sincroniza el `min_quantity` de
+  los precios. Cambiar `DEFAULT_WHOLESALE_THRESHOLD` en el código solo afecta
+  cuando no hay fila de ajustes, y no toca los precios ya cargados.
+- Si el umbral se cambia con variantes `blocked`, esas conservan su
+  `min_quantity` anterior hasta corregir los duplicados y volver a guardar.

@@ -5,8 +5,8 @@
 | Sección | Contenido |
 |---|---|
 | [1. Convenciones](#1-convenciones) | Autenticación, errores y placeholders |
-| [2. Store](#2-store) | `sync`, `sync-wholesale`, `wholesale-summary`, `custom` |
-| [3. Admin](#3-admin) | `wholesale-price` (variante), `wholesale-prices` (producto), `custom` |
+| [2. Store](#2-store) | `sync`, `sync-wholesale`, `wholesale-summary`, `products/wholesale`, `custom` |
+| [3. Admin](#3-admin) | `wholesale-price` (variante), `wholesale-prices` (producto), `wholesale-settings`, `custom` |
 | [4. Pendientes y no verificado](#4-pendientes-y-no-verificado) | Lo que falta revisar |
 
 Todas las rutas viven en `backend/apps/backend/src/api/`. Este documento solo
@@ -36,6 +36,13 @@ cubre las rutas propias del proyecto; las rutas nativas de Medusa (por ejemplo
 `<PUBLISHABLE_KEY>`, `<CART_ID>`, `<PRODUCT_ID>`, `<VARIANT_ID>`, `<SKU>`, `<ADMIN_TOKEN>`.
 
 **Montos**: en unidades de la moneda (80 = $80.00 MXN), igual que Medusa v2.
+
+**Umbral de mayoreo**: todos los `threshold` (y el `min_quantity` de las rutas
+de admin) salen del umbral global guardado en el módulo `wholesaleSettings`
+(`getWholesaleThreshold` en `src/lib/wholesale-settings.ts`). Si no hay fila de
+ajustes, o no se puede leer (p. ej. migración sin correr), vale **15**
+(`DEFAULT_WHOLESALE_THRESHOLD`) y se escribe un aviso en el log. Los ejemplos de
+este documento usan 15.
 
 ---
 
@@ -205,10 +212,58 @@ Medusa (**código exacto no verificado**, se espera 404).
 
 **Efectos secundarios**: ninguno (solo lectura).
 
-> Nota: esta ruta todavía tiene el umbral `15` escrito a mano; no usa la
-> constante compartida `WHOLESALE_MIN_QUANTITY`.
+El umbral es el global (`getWholesaleThreshold`) y el cálculo es
+`summarizeWholesale` de `src/lib/cart-wholesale.ts`, el mismo que usa `sync`.
 
-### 2.4 `GET /store/custom`
+### 2.4 `GET /store/custom/products/wholesale`
+
+Archivo: `src/api/store/custom/products/wholesale/route.ts`
+
+**Para qué sirve**: el menor precio de mayoreo de cada producto (entre sus
+variantes), p. ej. para mostrarlo en el catálogo. Solo lectura.
+
+**Autenticación**: publishable key.
+
+**Query**
+
+| Parámetro | Descripción |
+|---|---|
+| `product_ids` | Ids separados por comas (también se acepta el parámetro repetido). Se quitan vacíos y repetidos. Entre 1 y **100** |
+
+```bash
+curl "<BACKEND_URL>/store/custom/products/wholesale?product_ids=<PRODUCT_ID>,<PRODUCT_ID_2>"   -H "x-publishable-api-key: <PUBLISHABLE_KEY>"
+```
+
+```json
+{
+  "threshold": 15,
+  "products": [
+    { "product_id": "<PRODUCT_ID>", "wholesale_price": 60 }
+  ]
+}
+```
+
+- `wholesale_price`: el menor `amount` entre los precios de mayoreo (MXN sin
+  reglas ni lista de precios, `min_quantity` no nulo y > 1, sin `max_quantity`)
+  de todas sus variantes.
+- Se **omiten**: los productos sin mayoreo, los que no existen, los que no están
+  publicados (`status: "published"`) y los que no están en ningún canal de venta
+  de la publishable key. El orden es el de `product_ids`.
+- Canal de venta: se usa `req.publishable_key_context.sales_channel_ids`, que
+  pone el middleware `ensure-publishable-api-key` de Medusa (verificado en
+  2.17.2). Si la key no tiene canales, **no se filtra por canal** (decisión de
+  esta ruta; cómo trata Medusa ese caso en sus rutas nativas: **no verificado**).
+
+**Errores**
+
+| Código | Mensaje |
+|---|---|
+| 400 | `product_ids es obligatorio (ids separados por comas)` |
+| 400 | `product_ids admite como máximo 100 ids (llegaron N)` |
+
+**Efectos secundarios**: ninguno.
+
+### 2.5 `GET /store/custom`
 
 Archivo: `src/api/store/custom/route.ts`. Ruta de ejemplo de la plantilla de
 Medusa: responde `200` sin cuerpo. No tiene uso en el proyecto.
@@ -234,14 +289,21 @@ sección):
   "retail_amount": 80,
   "retail_count": 1,
   "wholesale_amount": 60,
-  "wholesale_count": 1
+  "wholesale_count": 1,
+  "wholesale_min_quantity": 15
 }
 ```
 
+- `min_quantity`: el **umbral global** (no el del precio guardado).
 - `retail_amount`: precio MXN sin reglas y sin `min_quantity`. Es `null` si no
   hay ninguno **o si hay más de uno** (`retail_count` > 1).
-- `wholesale_amount`: precio MXN sin reglas con `min_quantity` = 15, o `null`.
-  Si hay varios (`wholesale_count` > 1), es el primero.
+- `wholesale_amount`: precio de mayoreo, o `null`. Un precio es de mayoreo si es
+  MXN, sin reglas, no es de lista de precios, tiene `min_quantity` no nulo y
+  mayor que 1, y no tiene `max_quantity`. Si hay varios (`wholesale_count` > 1),
+  es el primero.
+- `wholesale_min_quantity`: el `min_quantity` guardado en ese precio. Si no
+  coincide con `min_quantity`, el precio quedó sin sincronizar; al guardar la
+  variante se lleva al umbral.
 
 **Variante bloqueada**: `retail_count` > 1 o `wholesale_count` > 1. Estas rutas
 no la modifican ni borran nada; hay que dejar un solo precio de cada tipo a mano.
@@ -261,7 +323,8 @@ que reemplaza la lista de precios de cada variante. Se reenvían por `id` (sin
 `rules`) todos los precios que se conservan, así que los precios con reglas de
 región, los de otras monedas y los MXN con otros mínimos quedan intactos. Los
 precios de listas de precios no se tocan. Las variantes que ya tienen los
-valores pedidos no se envían.
+valores pedidos (y su mayoreo con `min_quantity` igual al umbral) no se envían.
+El mayoreo se crea o se guarda siempre con `min_quantity` = umbral global.
 
 ### 3.1 `GET /admin/variants/:id/wholesale-price`
 
@@ -315,6 +378,7 @@ con otros mínimos que se conservan):
   "retail_count": 1,
   "wholesale_amount": 62,
   "wholesale_count": 1,
+  "wholesale_min_quantity": 15,
   "updated": true,
   "warnings": []
 }
@@ -330,7 +394,7 @@ con otros mínimos que se conservan):
 | 400 | `No se puede guardar: el mayoreo (<x>) debe ser menor que el normal (<y>)` (`code: "conflict"`) |
 | 400 | `No se puede guardar: no hay precio normal MXN sin reglas con el cual comparar el mayoreo` (`code: "conflict"`) |
 | 400 | `No se puede guardar: tiene N precios MXN sin reglas y sin min_quantity (...); resuélvelo a mano` (`code: "blocked"`) |
-| 400 | `No se puede guardar: tiene N precios de mayoreo (min 15) (...); resuélvelo a mano` (`code: "blocked"`) |
+| 400 | `No se puede guardar: tiene N precios de mayoreo (MXN sin reglas con min_quantity > 1) (...); resuélvelo a mano` (`code: "blocked"`) |
 | 400 | `No se puede guardar: sin price_set` (`code: "blocked"`) |
 | 404 | `Variante <id> no encontrada` |
 
@@ -417,7 +481,101 @@ el resto sí se actualiza.
 con todas las variantes que cambian. Que esa ejecución revierta todo si falla a
 mitad depende de la compensación del workflow nativo: **no verificado**.
 
-### 3.5 `GET /admin/custom`
+### 3.5 `GET /admin/wholesale-settings`
+
+Archivo: `src/api/admin/wholesale-settings/route.ts`
+
+**Para qué sirve**: leer el umbral global de mayoreo (pares mínimos sumando
+todo el carrito). Lo usa el widget **Mayoreo** del listado de productos.
+
+**Autenticación**: sesión de administrador.
+
+```bash
+curl "<BACKEND_URL>/admin/wholesale-settings"   -H "Authorization: Bearer <ADMIN_TOKEN>"
+```
+
+```json
+{ "threshold": 15 }
+```
+
+**Efectos secundarios**: ninguno.
+
+### 3.6 `POST /admin/wholesale-settings`
+
+**Para qué sirve**: cambiar el umbral global y llevar el `min_quantity` de
+**todos** los precios de mayoreo existentes al nuevo valor.
+
+**Autenticación**: sesión de administrador.
+
+**Body**: `{ "threshold": <entero entre 2 y 9999> }`.
+
+**Query opcional**: `dry_run=true` (o `1`) calcula y responde sin aplicar nada.
+El widget lo usa para decir en la confirmación cuántos precios cambiarán.
+
+```bash
+# Solo calcular
+curl -X POST "<BACKEND_URL>/admin/wholesale-settings?dry_run=true"   -H "Authorization: Bearer <ADMIN_TOKEN>"   -H "Content-Type: application/json"   -d '{ "threshold": 12 }'
+
+# Aplicar
+curl -X POST "<BACKEND_URL>/admin/wholesale-settings"   -H "Authorization: Bearer <ADMIN_TOKEN>"   -H "Content-Type: application/json"   -d '{ "threshold": 12 }'
+```
+
+**Respuesta (200)**
+
+```json
+{
+  "threshold": 12,
+  "updated_prices": 40,
+  "blocked": [
+    {
+      "variant_id": "<VARIANT_ID>",
+      "variant_title": "26",
+      "product_id": "<PRODUCT_ID>",
+      "product_title": "<TITULO>",
+      "reason": "tiene 2 precios de mayoreo (MXN sin reglas con min_quantity > 1) (...); resuélvelo a mano"
+    }
+  ]
+}
+```
+
+Con `dry_run=true` la respuesta añade `"dry_run": true` y `current_threshold`
+(el umbral guardado antes del cambio).
+
+**Cómo funciona** (`planWholesaleThresholdSync` en
+`src/lib/wholesale-pricing.ts` y workflow `update-wholesale-threshold`):
+
+1. Lee **todas** las variantes con sus precios, por lotes de 200
+   (`fetchAllVariantsWithPrices`).
+2. Solo considera las variantes con al menos un precio de mayoreo. Para cada
+   una, planea el mismo monto con `min_quantity` = umbral nuevo
+   (`planVariantPrices` con `strictDuplicates: true`). No cambia montos, y no
+   toca precios normales, con reglas, de otras monedas ni de listas de precios.
+3. Las variantes que no se pueden actualizar no se tocan y vuelven en
+   `blocked`: mayoreos duplicados, normales duplicados, mayoreo sin precio
+   normal o mayoreo mayor o igual que el normal.
+4. El workflow guarda el umbral y después ejecuta **una sola vez**
+   `updateProductVariantsWorkflow` con todas las variantes que cambian. Si ese
+   paso falla, se compensa el umbral: vuelve al valor anterior (o a 15 si no
+   había fila).
+5. `updated_prices` es el número de precios de mayoreo modificados; como las
+   variantes con duplicados quedan fuera, es igual al número de variantes
+   actualizadas. Las que ya tenían el umbral no cuentan.
+
+**Errores**
+
+| Código | Mensaje |
+|---|---|
+| 400 | `threshold debe ser un número entero entre 2 y 9999` |
+
+**No verificado**:
+
+- Si `updateProductVariantsWorkflow` revierte por completo un fallo a mitad de
+  su propia ejecución.
+- Que no haya cambios de precios entre la lectura (paso 1) y la escritura
+  (paso 4): no hay lock.
+- El tiempo de respuesta con catálogos grandes.
+
+### 3.7 `GET /admin/custom`
 
 Archivo: `src/api/admin/custom/route.ts`. Ruta de ejemplo de la plantilla:
 responde `200` sin cuerpo.
