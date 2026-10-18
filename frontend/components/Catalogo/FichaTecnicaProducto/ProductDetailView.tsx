@@ -49,7 +49,7 @@ export default function ProductDetailView({ product }: ProductDetailViewProps) {
       {/* Info del producto */}
       <div>
         <h1 className="text-3xl font-black">
-          {product.code} {product.name}
+          {product.name}
         </h1>
         <p className="mt-2 text-2xl font-bold">
           ${product.price.toFixed(2)} {product.currency ?? "MXN"}

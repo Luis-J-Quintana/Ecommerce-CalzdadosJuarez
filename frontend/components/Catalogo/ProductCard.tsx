@@ -71,7 +71,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         {/* Bloque de información*/}
         <div className="mt-3 flex flex-col gap-1">
           <h3 className="text-sm font-semibold text-black">
-            {product.code} {product.name}
+            {product.name}
           </h3>
 
           {/* Calificación */}
